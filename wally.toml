@@ -1,0 +1,8 @@
+[package]
+name = "alex/the-murder-express"
+version = "0.1.0"
+registry = "https://github.com/UpliftGames/wally-index"
+realm = "shared"
+
+[dependencies]
+bytenet-max = "elitriare/bytenet-max@0.2.5"
