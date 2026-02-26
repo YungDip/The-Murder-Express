@@ -22,7 +22,27 @@ type Lane = {
 	CycleLength: number,
 }
 
+type BulkScrollEntity = {
+	PartStartIndex: number,
+	PartCount: number,
+	OriginalX: number,
+}
+
+type BulkScrollGroup = {
+	AllParts: {BasePart},
+	AllOriginalCFrames: {CFrame},
+	AllNewCFrames: {CFrame},
+	Entities: {BulkScrollEntity},
+	Clones: {Instance},
+	Direction: number,
+	Speed: number,
+	CycleLength: number,
+	AnchorX: number,
+	HalfSpan: number,
+}
+
 local Lanes: {Lane} = {}
+local BulkScrollGroups: {BulkScrollGroup} = {}
 local StartTime: number = 0
 
 -- Helpers
@@ -107,6 +127,118 @@ function WorldScrollController.RemoveLane(TargetLane: Lane)
 	end
 end
 
+type BulkScrollConfig = {
+	FolderName: string,
+	Lane: Lane,
+}
+
+function WorldScrollController.AttachBulkScroll(Config: BulkScrollConfig): BulkScrollGroup
+	local Folder = workspace:WaitForChild(Config.FolderName)
+	local ReferenceLane = Config.Lane
+
+	local Direction = ReferenceLane.Direction
+	local AnchorX = ReferenceLane.AnchorCFrame.Position.X
+	local CycleLen = ReferenceLane.CycleLength
+	local TileWidth = ReferenceLane.TileWidth
+	local PoolSize = ReferenceLane.PoolSize
+	local HalfSpan = math.floor(PoolSize / 2) * TileWidth
+
+	local AllParts: {BasePart} = {}
+	local AllOriginalCFrames: {CFrame} = {}
+	local AllNewCFrames: {CFrame} = {}
+	local Entities: {BulkScrollEntity} = {}
+	local Clones: {Instance} = {}
+
+	local OriginalChildren = Folder:GetChildren()
+
+	for CopyIndex = 0, PoolSize - 1 do
+		local ShiftVector = Vector3.new(Direction * CopyIndex * TileWidth, 0, 0)
+
+		for _, Child in OriginalChildren do
+			local Source: Instance
+			if CopyIndex == 0 then
+				Source = Child
+			else
+				Source = Child:Clone()
+				Source.Parent = Folder
+				table.insert(Clones, Source)
+			end
+
+			local Pivot = if Source:IsA("BasePart") then Source.CFrame else Source:GetPivot()
+			local ChildParts: {BasePart} = {}
+
+			if Source:IsA("BasePart") then
+				table.insert(ChildParts, Source)
+			else
+				for _, Desc in Source:GetDescendants() do
+					if Desc:IsA("BasePart") then
+						table.insert(ChildParts, Desc)
+					end
+				end
+			end
+
+			if #ChildParts == 0 then
+				continue
+			end
+
+			if CopyIndex > 0 then
+				for _, Part in ChildParts do
+					Part.CFrame += ShiftVector
+				end
+			end
+
+			local StartIndex = #AllParts + 1
+			for _, Part in ChildParts do
+				table.insert(AllParts, Part)
+				table.insert(AllOriginalCFrames, Part.CFrame)
+				table.insert(AllNewCFrames, Part.CFrame)
+			end
+
+			local EntityOriginalX = (Pivot.Position.X - AnchorX) * Direction + CopyIndex * TileWidth
+			table.insert(Entities, {
+				PartStartIndex = StartIndex,
+				PartCount = #ChildParts,
+				OriginalX = EntityOriginalX,
+			})
+		end
+	end
+
+	local Group: BulkScrollGroup = {
+		AllParts = AllParts,
+		AllOriginalCFrames = AllOriginalCFrames,
+		AllNewCFrames = AllNewCFrames,
+		Entities = Entities,
+		Clones = Clones,
+		Direction = Direction,
+		Speed = ReferenceLane.Speed,
+		CycleLength = CycleLen,
+		AnchorX = AnchorX,
+		HalfSpan = HalfSpan,
+	}
+
+	table.insert(BulkScrollGroups, Group)
+	return Group
+end
+
+function WorldScrollController.DetachBulkScroll(TargetGroup: BulkScrollGroup)
+	for _, Clone in TargetGroup.Clones do
+		if Clone.Parent then
+			Clone:Destroy()
+		end
+	end
+
+	for Index, Part in TargetGroup.AllParts do
+		if Part.Parent then
+			Part.CFrame = TargetGroup.AllOriginalCFrames[Index]
+		end
+	end
+
+	local Found = table.find(BulkScrollGroups, TargetGroup)
+	if Found then
+		table.remove(BulkScrollGroups, Found)
+	end
+end
+
 -- Boot
 
 local Wheels: {{Mesh: MeshPart, Origin: CFrame, Radius: number}} = {}
@@ -123,8 +255,9 @@ end
 
 WorldScrollController.AddLane({ ModelName = "LeftSide", Direction = -1 })
 WorldScrollController.AddLane({ ModelName = "RightSide", Direction = 1 })
-WorldScrollController.AddLane({ ModelName = "Baseplate", Direction = 1, PoolSize = 11 })
-WorldScrollController.AddLane({ ModelName = "Tracks", Direction = 1, PoolSize = 11 })
+local BaseplateLane = WorldScrollController.AddLane({ ModelName = "Baseplate", Direction = 1, PoolSize = 5 })
+WorldScrollController.AddLane({ ModelName = "Tracks", Direction = 1, PoolSize = 3 })
+--WorldScrollController.AttachBulkScroll({ FolderName = "Trees", Lane = BaseplateLane })
 
 StartTime = os.clock()
 
@@ -134,6 +267,28 @@ RunService.PreRender:Connect(function()
 
 	for _, LaneData in Lanes do
 		UpdateLane(LaneData, LaneData.Speed * Elapsed)
+	end
+
+	for _, Group in BulkScrollGroups do
+		local ScrollOffset = Group.Speed * Elapsed
+		local CycleLen = Group.CycleLength
+		local HalfSpan = Group.HalfSpan
+		local Dir = Group.Direction
+
+		for _, Entity in Group.Entities do
+			local RawPos = Entity.OriginalX - (ScrollOffset % CycleLen)
+			local WrappedPos = RawPos % CycleLen
+			local FinalLocalX = WrappedPos - HalfSpan
+			local DeltaX = Dir * (FinalLocalX - Entity.OriginalX)
+			local Offset = Vector3.new(DeltaX, 0, 0)
+
+			for I = 0, Entity.PartCount - 1 do
+				local Idx = Entity.PartStartIndex + I
+				Group.AllNewCFrames[Idx] = Group.AllOriginalCFrames[Idx] + Offset
+			end
+		end
+
+		workspace:BulkMoveTo(Group.AllParts, Group.AllNewCFrames, Enum.BulkMoveMode.FireCFrameChanged)
 	end
 
 	for _, Wheel in Wheels do

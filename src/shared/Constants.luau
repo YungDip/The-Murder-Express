@@ -20,7 +20,7 @@ Constants.Sound = {
 }
 
 Constants.WorldScroll = {
-	SCROLL_SPEED = 800,
+	SCROLL_SPEED = 300,
 	TILE_POOL_SIZE = 3,
 }
 
