@@ -1,7 +1,7 @@
 local RunService = game:GetService("RunService")
 
 local Constants = require(game:GetService("ReplicatedStorage").Shared.Constants)
-local InsideCheck = require(game:GetService("ReplicatedStorage").Shared.Util.InsideCheck)
+local SoundZoneCheck = require(game:GetService("ReplicatedStorage").Shared.Util.SoundZoneCheck)
 
 local Camera = workspace.CurrentCamera
 
@@ -40,14 +40,19 @@ local RotPhaseOffset = Vector3.new(
 	math.random() * math.pi * 2
 )
 
--- Inside/Outside transitions
+-- Zone transitions
 
-local function OnInsideChanged(IsInside: boolean)
-	if IsInside then
+local function OnZoneChanged(Zone: SoundZoneCheck.SoundZone)
+	if Zone == "Inside" then
 		TargetAmplitude = BobConst.INSIDE_AMPLITUDE
 		TargetRotAmplitude = BobConst.INSIDE_ROT_AMPLITUDE
 		TargetFrequency = BobConst.INSIDE_FREQUENCY
 		TargetRotFrequency = BobConst.INSIDE_ROT_FREQUENCY
+	elseif Zone == "Roof" then
+		TargetAmplitude = BobConst.ROOF_AMPLITUDE
+		TargetRotAmplitude = BobConst.ROOF_ROT_AMPLITUDE
+		TargetFrequency = BobConst.ROOF_FREQUENCY
+		TargetRotFrequency = BobConst.ROOF_ROT_FREQUENCY
 	else
 		TargetAmplitude = BobConst.OUTSIDE_AMPLITUDE
 		TargetRotAmplitude = BobConst.OUTSIDE_ROT_AMPLITUDE
@@ -77,14 +82,18 @@ local function SampleNoise(Time: number, Freq: Vector3, Phase: Vector3): Vector3
 	return Vector3.new(X * Norm, Y * Norm, Z * Norm)
 end
 
--- Gust loop (random wind bursts when outside)
+-- Gust loop (random wind bursts when outside/roof)
 
 task.spawn(function()
 	while true do
 		local Interval = math.random(BobConst.GUST_MIN_INTERVAL, BobConst.GUST_MAX_INTERVAL)
 		task.wait(Interval)
 
-		if not InsideCheck.IsInside() then
+		local Zone = SoundZoneCheck.GetState()
+		if Zone == "Roof" then
+			GustTarget = BobConst.GUST_ROOF_INTENSITY
+			GustDecaySpeed = (BobConst.GUST_ROOF_INTENSITY - 1) / BobConst.GUST_DURATION
+		elseif not SoundZoneCheck.IsInside() then
 			GustTarget = BobConst.GUST_INTENSITY
 			GustDecaySpeed = (BobConst.GUST_INTENSITY - 1) / BobConst.GUST_DURATION
 		end
@@ -129,6 +138,6 @@ end)
 
 -- Boot
 
-InsideCheck.OnChanged(OnInsideChanged)
+SoundZoneCheck.OnChanged(OnZoneChanged)
 
 return CameraController

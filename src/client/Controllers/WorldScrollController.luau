@@ -164,7 +164,7 @@ function WorldScrollController.AttachBulkScroll(Config: BulkScrollConfig): BulkS
 				table.insert(Clones, Source)
 			end
 
-			local Pivot = if Source:IsA("BasePart") then Source.CFrame else Source:GetPivot()
+			local Pivot = if Source:IsA("BasePart") then Source.CFrame else (Source :: Model):GetPivot()
 			local ChildParts: {BasePart} = {}
 
 			if Source:IsA("BasePart") then
@@ -255,7 +255,7 @@ end
 
 WorldScrollController.AddLane({ ModelName = "LeftSide", Direction = -1 })
 WorldScrollController.AddLane({ ModelName = "RightSide", Direction = 1 })
-local BaseplateLane = WorldScrollController.AddLane({ ModelName = "Baseplate", Direction = 1, PoolSize = 5 })
+WorldScrollController.AddLane({ ModelName = "Baseplate", Direction = 1, PoolSize = 5 })
 WorldScrollController.AddLane({ ModelName = "Tracks", Direction = 1, PoolSize = 3 })
 --WorldScrollController.AttachBulkScroll({ FolderName = "Trees", Lane = BaseplateLane })
 

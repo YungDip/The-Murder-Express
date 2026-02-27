@@ -18,6 +18,11 @@
       }
     },
 
+    "ServerStorage": {
+      "$path": "src/server_storage",
+      "$ignoreUnknownInstances": true
+    },
+
     "StarterPlayer": {
       "StarterPlayerScripts": {
         "Client": {
