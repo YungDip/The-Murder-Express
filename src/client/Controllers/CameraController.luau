@@ -1,7 +1,7 @@
 local RunService = game:GetService("RunService")
 
 local Constants = require(game:GetService("ReplicatedStorage").Shared.Constants)
-local SoundZoneCheck = require(game:GetService("ReplicatedStorage").Shared.Util.SoundZoneCheck)
+local ZoneCheck = require(game:GetService("ReplicatedStorage").Shared.Util.ZoneCheck)
 
 local Camera = workspace.CurrentCamera
 
@@ -42,7 +42,7 @@ local RotPhaseOffset = Vector3.new(
 
 -- Zone transitions
 
-local function OnZoneChanged(Zone: SoundZoneCheck.SoundZone)
+local function OnZoneChanged(Zone: ZoneCheck.Zone)
 	if Zone == "Inside" then
 		TargetAmplitude = BobConst.INSIDE_AMPLITUDE
 		TargetRotAmplitude = BobConst.INSIDE_ROT_AMPLITUDE
@@ -89,11 +89,11 @@ task.spawn(function()
 		local Interval = math.random(BobConst.GUST_MIN_INTERVAL, BobConst.GUST_MAX_INTERVAL)
 		task.wait(Interval)
 
-		local Zone = SoundZoneCheck.GetState()
+		local Zone = ZoneCheck.GetState()
 		if Zone == "Roof" then
 			GustTarget = BobConst.GUST_ROOF_INTENSITY
 			GustDecaySpeed = (BobConst.GUST_ROOF_INTENSITY - 1) / BobConst.GUST_DURATION
-		elseif not SoundZoneCheck.IsInside() then
+		elseif not ZoneCheck.IsInside() then
 			GustTarget = BobConst.GUST_INTENSITY
 			GustDecaySpeed = (BobConst.GUST_INTENSITY - 1) / BobConst.GUST_DURATION
 		end
@@ -138,6 +138,6 @@ end)
 
 -- Boot
 
-SoundZoneCheck.OnChanged(OnZoneChanged)
+ZoneCheck.OnChanged(OnZoneChanged)
 
 return CameraController

@@ -145,8 +145,6 @@ function TrainGeneration:Generate(Length: number, Seed: number)
 		Car.Name = CarType .. "_" .. Index
 		Car.Parent = workspace.Train
 
-		print(Car, Car.Parent)
-
 		local EndPart = Car:FindFirstChild("End")
 		if EndPart then
 			PreviousEnd = EndPart
@@ -157,7 +155,6 @@ function TrainGeneration:Generate(Length: number, Seed: number)
 end
 
 do
-	print("gen")
 	TrainGeneration:Generate(10, os.time())
 end
 

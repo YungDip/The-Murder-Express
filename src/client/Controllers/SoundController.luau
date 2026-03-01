@@ -2,13 +2,14 @@ local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 
 local Constants = require(game:GetService("ReplicatedStorage").Shared.Constants)
-local SoundZoneCheck = require(game:GetService("ReplicatedStorage").Shared.Util.SoundZoneCheck)
+local ZoneCheck = require(game:GetService("ReplicatedStorage").Shared.Util.ZoneCheck)
 
 local Ambient = SoundService:WaitForChild("Ambient")
 local InteriorSound = Ambient:WaitForChild("InteriorLoop")
 local WheelsTemplate = Ambient:WaitForChild("WheelsLoop")
 local WhistleTemplate = Ambient:WaitForChild("Whistle")
 local RainSound = Ambient:WaitForChild("RainLoop")
+local BlizzardSound = Ambient:WaitForChild("Blizzard")
 local WindSound = Ambient:WaitForChild("WindLoop")
 local ThunderSound = Ambient:WaitForChild("Thunder")
 
@@ -16,7 +17,7 @@ local SoundController = {}
 
 -- Helpers
 
-local function GetZoneVolume(Zone: SoundZoneCheck.SoundZone, Inside: number, Medium: number, Outside: number, Roof: number?): number
+local function GetZoneVolume(Zone: ZoneCheck.Zone, Inside: number, Medium: number, Outside: number, Roof: number?): number
 	if Zone == "Inside" then return Inside end
 	if Zone == "Medium" then return Medium end
 	if Zone == "Roof" then return Roof or Outside end
@@ -27,7 +28,7 @@ end
 
 local FadeTween: Tween = nil
 
-local function FadeInterior(Zone: SoundZoneCheck.SoundZone)
+local function FadeInterior(Zone: ZoneCheck.Zone)
 	local SoundConst = Constants.Sound
 	local TargetVolume = GetZoneVolume(Zone, SoundConst.INTERIOR_VOLUME, SoundConst.INTERIOR_VOLUME_MEDIUM, 0, 0)
 
@@ -45,11 +46,11 @@ end
 
 function SoundController.InitInterior()
 	local SoundConst = Constants.Sound
-	local Zone = SoundZoneCheck.GetState()
+	local Zone = ZoneCheck.GetState()
 	InteriorSound.Volume = GetZoneVolume(Zone, SoundConst.INTERIOR_VOLUME, SoundConst.INTERIOR_VOLUME_MEDIUM, 0, 0)
 	InteriorSound:Play()
 
-	SoundZoneCheck.OnChanged(FadeInterior)
+	ZoneCheck.OnChanged(FadeInterior)
 end
 
 -- Weather Ambience (rain, wind, thunder — quieter inside)
@@ -73,26 +74,30 @@ local function FadeWeatherSound(TargetSound: Sound, TargetVolume: number)
 	NewTween:Play()
 end
 
-local function FadeWeather(Zone: SoundZoneCheck.SoundZone)
+local function FadeWeather(Zone: ZoneCheck.Zone)
 	local SoundConst = Constants.Sound
 
 	FadeWeatherSound(RainSound, GetZoneVolume(Zone, SoundConst.RAIN_VOLUME_INSIDE, SoundConst.RAIN_VOLUME_MEDIUM, SoundConst.RAIN_VOLUME_OUTSIDE, SoundConst.RAIN_VOLUME_ROOF))
+	FadeWeatherSound(BlizzardSound, GetZoneVolume(Zone, SoundConst.BLIZZARD_VOLUME_INSIDE, SoundConst.BLIZZARD_VOLUME_MEDIUM, SoundConst.BLIZZARD_VOLUME_OUTSIDE, SoundConst.BLIZZARD_VOLUME_ROOF))
 	FadeWeatherSound(WindSound, GetZoneVolume(Zone, SoundConst.WIND_VOLUME_INSIDE, SoundConst.WIND_VOLUME_MEDIUM, SoundConst.WIND_VOLUME_OUTSIDE, SoundConst.WIND_VOLUME_ROOF))
 end
 
 function SoundController.InitWeather()
 	local SoundConst = Constants.Sound
-	local Zone = SoundZoneCheck.GetState()
+	local Zone = ZoneCheck.GetState()
 
 	RainSound.Volume = GetZoneVolume(Zone, SoundConst.RAIN_VOLUME_INSIDE, SoundConst.RAIN_VOLUME_MEDIUM, SoundConst.RAIN_VOLUME_OUTSIDE, SoundConst.RAIN_VOLUME_ROOF)
 	RainSound:Play()
+
+	BlizzardSound.Volume = GetZoneVolume(Zone, SoundConst.BLIZZARD_VOLUME_INSIDE, SoundConst.BLIZZARD_VOLUME_MEDIUM, SoundConst.BLIZZARD_VOLUME_OUTSIDE, SoundConst.BLIZZARD_VOLUME_ROOF)
+	BlizzardSound:Play()
 
 	WindSound.Volume = GetZoneVolume(Zone, SoundConst.WIND_VOLUME_INSIDE, SoundConst.WIND_VOLUME_MEDIUM, SoundConst.WIND_VOLUME_OUTSIDE, SoundConst.WIND_VOLUME_ROOF)
 	WindSound:Play()
 
 	ThunderSound.Volume = GetZoneVolume(Zone, SoundConst.THUNDER_VOLUME_INSIDE, SoundConst.THUNDER_VOLUME_MEDIUM, SoundConst.THUNDER_VOLUME_OUTSIDE, SoundConst.THUNDER_VOLUME_ROOF)
 
-	SoundZoneCheck.OnChanged(FadeWeather)
+	ZoneCheck.OnChanged(FadeWeather)
 end
 
 -- Thunder (random interval, like the horn)
@@ -104,7 +109,7 @@ function SoundController.InitThunder()
 		local Interval = math.random(SoundConst.THUNDER_MIN_INTERVAL, SoundConst.THUNDER_MAX_INTERVAL)
 		task.wait(Interval)
 
-		local Zone = SoundZoneCheck.GetState()
+		local Zone = ZoneCheck.GetState()
 		ThunderSound.Volume = GetZoneVolume(Zone, SoundConst.THUNDER_VOLUME_INSIDE, SoundConst.THUNDER_VOLUME_MEDIUM, SoundConst.THUNDER_VOLUME_OUTSIDE, SoundConst.THUNDER_VOLUME_ROOF)
 		ThunderSound:Play()
 	end
@@ -114,7 +119,7 @@ end
 
 local WheelSounds: {Sound} = {}
 
-local function FadeWheels(Zone: SoundZoneCheck.SoundZone)
+local function FadeWheels(Zone: ZoneCheck.Zone)
 	local SoundConst = Constants.Sound
 	local TargetVolume = GetZoneVolume(Zone, SoundConst.WHEEL_VOLUME_INSIDE, SoundConst.WHEEL_VOLUME_MEDIUM, SoundConst.WHEEL_VOLUME_OUTSIDE, SoundConst.WHEEL_VOLUME_ROOF)
 
@@ -125,7 +130,7 @@ end
 
 function SoundController.InitWheels()
 	local SoundConst = Constants.Sound
-	local Zone = SoundZoneCheck.GetState()
+	local Zone = ZoneCheck.GetState()
 	local InitVolume = GetZoneVolume(Zone, SoundConst.WHEEL_VOLUME_INSIDE, SoundConst.WHEEL_VOLUME_MEDIUM, SoundConst.WHEEL_VOLUME_OUTSIDE, SoundConst.WHEEL_VOLUME_ROOF)
 
 	local Seen: {[Instance]: boolean} = {}
@@ -154,7 +159,7 @@ function SoundController.InitWheels()
 		task.wait(SoundConst.WHEEL_STAGGER_DELAY)
 	end
 
-	SoundZoneCheck.OnChanged(FadeWheels)
+	ZoneCheck.OnChanged(FadeWheels)
 end
 
 -- Whistle / Horn Loop

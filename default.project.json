@@ -20,11 +20,18 @@
 
     "ServerStorage": {
       "$path": "src/server_storage",
-      "$ignoreUnknownInstances": true
+      "$ignoreUnknownInstances": true,
+      "CarModels" : {
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true
+      }
     },
 
     "StarterPlayer": {
       "StarterPlayerScripts": {
+        "PlayerModule": {
+          "$path": "src/starter_player/PlayerModule"
+        },
         "Client": {
           "$path": "src/client"
         }

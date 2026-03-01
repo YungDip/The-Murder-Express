@@ -1,13 +1,13 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
-local SoundZoneCheck = require(ReplicatedStorage.Shared.Util.SoundZoneCheck)
+local ZoneCheck = require(ReplicatedStorage.Shared.Util.ZoneCheck)
 
 local WindController = {}
 
 -- Helpers
 
-local function ApplyWind(Zone: SoundZoneCheck.SoundZone)
+local function ApplyWind(Zone: ZoneCheck.Zone)
 	if Zone == "Outside" or Zone == "Roof" then
 		workspace.GlobalWind = Constants.Wind.GLOBAL_WIND
 	else
@@ -17,6 +17,6 @@ end
 
 -- Boot
 
-SoundZoneCheck.OnChanged(ApplyWind)
+ZoneCheck.OnChanged(ApplyWind)
 
 return WindController

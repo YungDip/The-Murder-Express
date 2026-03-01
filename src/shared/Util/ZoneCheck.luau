@@ -3,12 +3,12 @@ local Players = game:GetService("Players")
 
 local Player = Players.LocalPlayer
 
-export type SoundZone = "Inside" | "Medium" | "Outside" | "Roof"
+export type Zone = "Inside" | "Medium" | "Outside" | "Roof"
 
-local SoundZoneCheck = {}
+local ZoneCheck = {}
 
-local Listeners: {(Zone: SoundZone) -> ()} = {}
-local CurrentState: SoundZone = "Inside"
+local Listeners: {(Zone: Zone) -> ()} = {}
+local CurrentState: Zone = "Inside"
 
 local MAX_CHECK_DISTANCE = 50
 local Params = OverlapParams.new()
@@ -38,7 +38,7 @@ local function IsPlayerInAnyTagged(Tag: string, Root: BasePart): boolean
 	return false
 end
 
-local function CheckState(): SoundZone
+local function CheckState(): Zone
 	local Root = GetPlayerRoot()
 	if not Root then return "Inside" end
 
@@ -55,19 +55,19 @@ end
 
 -- Public API
 
-function SoundZoneCheck.GetState(): SoundZone
+function ZoneCheck.GetState(): Zone
 	return CurrentState
 end
 
-function SoundZoneCheck.IsInside(): boolean
+function ZoneCheck.IsInside(): boolean
 	return CurrentState == "Inside"
 end
 
-function SoundZoneCheck.IsOnRoof(): boolean
+function ZoneCheck.IsOnRoof(): boolean
 	return CurrentState == "Roof"
 end
 
-function SoundZoneCheck.OnChanged(Callback: (Zone: SoundZone) -> ())
+function ZoneCheck.OnChanged(Callback: (Zone: Zone) -> ())
 	table.insert(Listeners, Callback)
 	Callback(CurrentState)
 end
@@ -89,4 +89,4 @@ task.spawn(function()
 	end
 end)
 
-return SoundZoneCheck
+return ZoneCheck

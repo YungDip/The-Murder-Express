@@ -1,5 +1,11 @@
 local Constants = {}
 
+--[[
+	ROOF = On top of carriages
+	OUTSIDE = On outdoor carriages (e.g. flat-bed at floor level)
+	MEDIUM = In connectors or carriages with thin walls
+	INSIDE = Inside normal carriages
+]]
 Constants.Sound = {
 	WHEEL_STAGGER_DELAY = 2,
 	WHEEL_VOLUME_ROOF = 1.0,
@@ -9,7 +15,7 @@ Constants.Sound = {
 	WHISTLE_INTERVAL = 25,
 	INTERIOR_VOLUME = 0.1,
 	INTERIOR_VOLUME_MEDIUM = 0.05,
-	INTERIOR_FADE_TIME = 1,
+	INTERIOR_FADE_TIME = 0.5,
 
 	WIND_VOLUME_ROOF = 0.5,
 	WIND_VOLUME_OUTSIDE = 0.2,
@@ -19,11 +25,15 @@ Constants.Sound = {
 	RAIN_VOLUME_OUTSIDE = 0.1,
 	RAIN_VOLUME_MEDIUM = 0.06,
 	RAIN_VOLUME_INSIDE = 0.02,
+	BLIZZARD_VOLUME_ROOF = 0.3,
+	BLIZZARD_VOLUME_OUTSIDE = 0.15,
+	BLIZZARD_VOLUME_MEDIUM = 0.08,
+	BLIZZARD_VOLUME_INSIDE = 0.03,
 	THUNDER_VOLUME_ROOF = 0.5,
 	THUNDER_VOLUME_OUTSIDE = 0.3,
 	THUNDER_VOLUME_MEDIUM = 0.2,
 	THUNDER_VOLUME_INSIDE = 0.1,
-	WEATHER_FADE_TIME = 1,
+	WEATHER_FADE_TIME = 0.5,
 	THUNDER_MIN_INTERVAL = 15,
 	THUNDER_MAX_INTERVAL = 45,
 }
@@ -43,7 +53,7 @@ Constants.Footstep = {
 	BASE_STEP_INTERVAL = 0.3,
 	DEFAULT_WALK_SPEED = 16,
 	MIN_SPEED_THRESHOLD = 0.5,
-	VOLUME = 0.1,
+	VOLUME = 0.2,
 	PITCH_MIN = 0.9,
 	PITCH_MAX = 1.1,
 
@@ -87,6 +97,14 @@ Constants.Door = {
 	CHECK_INTERVAL = 0.2,
 	SWING_ANGLE = 90,
 	SWING_DURATION = 0.35,
+}
+
+Constants.DeathVelocity = {
+	OUTSIDE_MULTIPLIER = 0.15,
+	ROOF_MULTIPLIER = 0.675,
+	UP_FORCE = -20,
+	MAX_FORCE = 200,
+	DURATION = 4,
 }
 
 return Constants
