@@ -2,6 +2,7 @@ local RunService = game:GetService("RunService")
 
 local Constants = require(game:GetService("ReplicatedStorage").Shared.Constants)
 local ZoneCheck = require(game:GetService("ReplicatedStorage").Shared.Util.ZoneCheck)
+local ScrollSpeedState = require(script.Parent.ScrollSpeedState)
 
 local Camera = workspace.CurrentCamera
 
@@ -119,16 +120,18 @@ RunService.PreRender:Connect(function(DeltaTime: number)
 		GustTarget = 1
 	end
 
+	local SpeedRatio = ScrollSpeedState.SpeedRatio
+
 	local PosNoise = SampleNoise(Elapsed, CurrentFrequency, PhaseOffset)
 	local RotNoise = SampleNoise(Elapsed, CurrentRotFrequency, RotPhaseOffset)
 
-	local OffsetX = PosNoise.X * CurrentAmplitude.X * GustMultiplier
-	local OffsetY = PosNoise.Y * CurrentAmplitude.Y * GustMultiplier
-	local OffsetZ = PosNoise.Z * CurrentAmplitude.Z * GustMultiplier
+	local OffsetX = PosNoise.X * CurrentAmplitude.X * GustMultiplier * SpeedRatio
+	local OffsetY = PosNoise.Y * CurrentAmplitude.Y * GustMultiplier * SpeedRatio
+	local OffsetZ = PosNoise.Z * CurrentAmplitude.Z * GustMultiplier * SpeedRatio
 
-	local RotX = math.rad(RotNoise.X * CurrentRotAmplitude.X * GustMultiplier)
-	local RotY = math.rad(RotNoise.Y * CurrentRotAmplitude.Y * GustMultiplier)
-	local RotZ = math.rad(RotNoise.Z * CurrentRotAmplitude.Z * GustMultiplier)
+	local RotX = math.rad(RotNoise.X * CurrentRotAmplitude.X * GustMultiplier * SpeedRatio)
+	local RotY = math.rad(RotNoise.Y * CurrentRotAmplitude.Y * GustMultiplier * SpeedRatio)
+	local RotZ = math.rad(RotNoise.Z * CurrentRotAmplitude.Z * GustMultiplier * SpeedRatio)
 
 	local BobCFrame = CFrame.new(OffsetX, OffsetY, OffsetZ)
 		* CFrame.Angles(RotX, RotY, RotZ)

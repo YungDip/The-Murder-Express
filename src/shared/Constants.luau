@@ -7,7 +7,7 @@ local Constants = {}
 	INSIDE = Inside normal carriages
 ]]
 Constants.Sound = {
-	WHEEL_STAGGER_DELAY = 2,
+	WHEEL_STAGGER_DELAY = 0.2,
 	WHEEL_VOLUME_ROOF = 1.0,
 	WHEEL_VOLUME_OUTSIDE = 0.75,
 	WHEEL_VOLUME_MEDIUM = 0.425,
@@ -39,8 +39,26 @@ Constants.Sound = {
 }
 
 Constants.WorldScroll = {
-	SCROLL_SPEED = 300,
+	DEFAULT_SPEED = 125,
+	BASELINE_SPEED = 200,
 	TILE_POOL_SIZE = 3,
+	ZONE_MODELS_FOLDER = "ZoneModels",
+	TUNNEL_MODEL = "TestTunnel",
+
+	-- How far ahead (studs) to spawn the tunnel's leading edge
+	TUNNEL_BUFFER = 600,
+
+	-- Lanes that always scroll regardless of scenery transitions
+	CONSTANT_LANES = {
+		{ ModelName = "Tracks", Direction = 1, PoolSize = 3 },
+		{ ModelName = "Baseplate", Direction = 1, PoolSize = 6, CenterPool = 4 },
+	},
+
+	-- Default deceleration (studs/s²) used when stopping at a scene
+	STOP_DECELERATION = 25,
+
+	-- How many repeats of the scenery set to place beyond the scene model as a visual buffer
+	SCENE_TAIL_REPEATS = 3,
 }
 
 Constants.Wind = {
