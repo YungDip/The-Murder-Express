@@ -13,8 +13,6 @@ local MAX_SUCCESSION = 2
 local FLATCAR_MAX_SUCCESSION = 4
 local ROOMS_PER_CABIN = 5
 
--- Rules are validator functions: (Sequence, Position, CarType, Length) -> boolean
--- Add new entries to this table to extend generation constraints
 TrainGeneration.Rules = {
 	ConnectorAdjacency = function(Sequence: {string}, Position: number, CarType: string, _Length: number): boolean
 		if CarType == "Connector" then
@@ -61,10 +59,38 @@ TrainGeneration.Rules = {
 	end,
 }
 
-local function GetModelByType(ModelPool: {Instance}, CarType: string): Model?
-	for _, Model in ModelPool do
-		if Model.Name == CarType then
-			return Model
+local function ShuffleArray(Array: {any}, Rng: Random)
+	for I = #Array, 2, -1 do
+		local J = Rng:NextInteger(1, I)
+		Array[I], Array[J] = Array[J], Array[I]
+	end
+end
+
+local function GetModelByType(ModelPool: {Instance}, CarType: string, Rng: Random, VariantBags: {[string]: {Queue: {Instance}, Source: {Instance}}}): Model?
+	for _, Item in ModelPool do
+		if Item.Name == CarType then
+			if Item:IsA("Folder") then
+				local Children = Item:GetChildren()
+				if #Children == 0 then
+					return nil
+				end
+
+				local Bag = VariantBags[CarType]
+				if not Bag then
+					local Shuffled = table.clone(Children)
+					ShuffleArray(Shuffled, Rng)
+					Bag = { Queue = Shuffled, Source = Children }
+					VariantBags[CarType] = Bag
+				end
+
+				if #Bag.Queue == 0 then
+					Bag.Queue = table.clone(Bag.Source)
+					ShuffleArray(Bag.Queue, Rng)
+				end
+
+				return table.remove(Bag.Queue)
+			end
+			return Item
 		end
 	end
 	return nil
@@ -118,7 +144,6 @@ function TrainGeneration:Generate(Length: number, Seed: number, PlayerCount: num
 	for Position = 1, Length do
 		local ValidTypes = GetValidTypes(self.Rules, Sequence, Position, Length)
 
-		-- Enforce CabinCar quota based on player count
 		local CabinCount = TypeCounts["CabinCar"] or 0
 		local CabinDeficit = RequiredCabinCars - CabinCount
 		local RemainingPositions = Length - Position + 1
@@ -145,7 +170,6 @@ function TrainGeneration:Generate(Length: number, Seed: number, PlayerCount: num
 			end
 		end
 
-		-- Prefer car types we haven't placed yet so every type appears at least once
 		local Needed = {}
 		for _, Type in ValidTypes do
 			if not TypeCounts[Type] then
@@ -160,11 +184,11 @@ function TrainGeneration:Generate(Length: number, Seed: number, PlayerCount: num
 		TypeCounts[Choice] = (TypeCounts[Choice] or 0) + 1
 	end
 
-	-- Clone and position each car
 	local PreviousEnd = LocomotiveEnd
+	local VariantBags: {[string]: {Queue: {Instance}, Source: {Instance}}} = {}
 
 	for Index, CarType in Sequence do
-		local Template = GetModelByType(self.ModelPool, CarType)
+		local Template = GetModelByType(self.ModelPool, CarType, Rng, VariantBags)
 		if not Template then
 			continue
 		end

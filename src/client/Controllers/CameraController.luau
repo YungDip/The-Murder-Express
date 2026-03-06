@@ -8,8 +8,6 @@ local Camera = workspace.CurrentCamera
 
 local CameraController = {}
 
--- State
-
 local BobConst = Constants.CameraBob
 
 local CurrentAmplitude = BobConst.INSIDE_AMPLITUDE
@@ -28,8 +26,6 @@ local GustDecaySpeed = 0
 
 local Elapsed = 0
 
--- Random phase offsets so axes don't sync up
-
 local PhaseOffset = Vector3.new(
 	math.random() * math.pi * 2,
 	math.random() * math.pi * 2,
@@ -40,8 +36,6 @@ local RotPhaseOffset = Vector3.new(
 	math.random() * math.pi * 2,
 	math.random() * math.pi * 2
 )
-
--- Zone transitions
 
 local function OnZoneChanged(Zone: ZoneCheck.Zone)
 	if Zone == "Inside" then
@@ -62,8 +56,6 @@ local function OnZoneChanged(Zone: ZoneCheck.Zone)
 	end
 end
 
--- Helpers
-
 local function LerpVector3(A: Vector3, B: Vector3, Alpha: number): Vector3
 	return A + (B - A) * Alpha
 end
@@ -83,8 +75,6 @@ local function SampleNoise(Time: number, Freq: Vector3, Phase: Vector3): Vector3
 	return Vector3.new(X * Norm, Y * Norm, Z * Norm)
 end
 
--- Gust loop (random wind bursts when outside/roof)
-
 task.spawn(function()
 	while true do
 		local Interval = math.random(BobConst.GUST_MIN_INTERVAL, BobConst.GUST_MAX_INTERVAL)
@@ -101,8 +91,6 @@ task.spawn(function()
 	end
 end)
 
--- Main update
-
 RunService.PreRender:Connect(function(DeltaTime: number)
 	Elapsed += DeltaTime
 
@@ -112,7 +100,6 @@ RunService.PreRender:Connect(function(DeltaTime: number)
 	CurrentFrequency = LerpVector3(CurrentFrequency, TargetFrequency, Alpha)
 	CurrentRotFrequency = LerpVector3(CurrentRotFrequency, TargetRotFrequency, Alpha)
 
-	-- Decay gust back to 1
 	if GustMultiplier > 1 then
 		GustMultiplier = math.max(1, GustMultiplier - GustDecaySpeed * DeltaTime)
 	elseif GustTarget > 1 then
@@ -138,8 +125,6 @@ RunService.PreRender:Connect(function(DeltaTime: number)
 
 	Camera.CFrame = Camera.CFrame * BobCFrame
 end)
-
--- Boot
 
 ZoneCheck.OnChanged(OnZoneChanged)
 

@@ -9,6 +9,8 @@ local ScrollSpeedState = require(script.Parent.ScrollSpeedState)
 local Ambient = SoundService:WaitForChild("Ambient")
 local InteriorSound = Ambient:WaitForChild("InteriorLoop")
 local WheelsTemplate = Ambient:WaitForChild("WheelsLoop")
+local AccelTemplate = Ambient:WaitForChild("WheelsAccelerating")
+local SlowingTemplate = Ambient:WaitForChild("WheelsSlowing")
 local WhistleTemplate = Ambient:WaitForChild("Whistle")
 local RainSound = Ambient:WaitForChild("RainLoop")
 local BlizzardSound = Ambient:WaitForChild("Blizzard")
@@ -17,16 +19,12 @@ local ThunderSound = Ambient:WaitForChild("Thunder")
 
 local SoundController = {}
 
--- Helpers
-
 local function GetZoneVolume(Zone: ZoneCheck.Zone, Inside: number, Medium: number, Outside: number, Roof: number?): number
 	if Zone == "Inside" then return Inside end
 	if Zone == "Medium" then return Medium end
 	if Zone == "Roof" then return Roof or Outside end
 	return Outside
 end
-
--- Interior Ambience (plays from SoundService, fades on inside/outside/medium)
 
 local FadeTween: Tween = nil
 
@@ -47,15 +45,10 @@ local function FadeInterior(Zone: ZoneCheck.Zone)
 end
 
 function SoundController.InitInterior()
-	local SoundConst = Constants.Sound
-	local Zone = ZoneCheck.GetState()
-	InteriorSound.Volume = GetZoneVolume(Zone, SoundConst.INTERIOR_VOLUME, SoundConst.INTERIOR_VOLUME_MEDIUM, 0, 0)
-	InteriorSound:Play()
+	InteriorSound.Volume = 0
 
 	ZoneCheck.OnChanged(FadeInterior)
 end
-
--- Weather Ambience (rain, wind, thunder — quieter inside)
 
 local WeatherTweens: {[Sound]: Tween} = {}
 
@@ -85,24 +78,13 @@ local function FadeWeather(Zone: ZoneCheck.Zone)
 end
 
 function SoundController.InitWeather()
-	local SoundConst = Constants.Sound
-	local Zone = ZoneCheck.GetState()
-
-	RainSound.Volume = GetZoneVolume(Zone, SoundConst.RAIN_VOLUME_INSIDE, SoundConst.RAIN_VOLUME_MEDIUM, SoundConst.RAIN_VOLUME_OUTSIDE, SoundConst.RAIN_VOLUME_ROOF)
-	RainSound:Play()
-
-	BlizzardSound.Volume = GetZoneVolume(Zone, SoundConst.BLIZZARD_VOLUME_INSIDE, SoundConst.BLIZZARD_VOLUME_MEDIUM, SoundConst.BLIZZARD_VOLUME_OUTSIDE, SoundConst.BLIZZARD_VOLUME_ROOF)
-	BlizzardSound:Play()
-
-	WindSound.Volume = GetZoneVolume(Zone, SoundConst.WIND_VOLUME_INSIDE, SoundConst.WIND_VOLUME_MEDIUM, SoundConst.WIND_VOLUME_OUTSIDE, SoundConst.WIND_VOLUME_ROOF)
-	WindSound:Play()
-
-	ThunderSound.Volume = GetZoneVolume(Zone, SoundConst.THUNDER_VOLUME_INSIDE, SoundConst.THUNDER_VOLUME_MEDIUM, SoundConst.THUNDER_VOLUME_OUTSIDE, SoundConst.THUNDER_VOLUME_ROOF)
+	RainSound.Volume = 0
+	BlizzardSound.Volume = 0
+	WindSound.Volume = 0
+	ThunderSound.Volume = 0
 
 	ZoneCheck.OnChanged(FadeWeather)
 end
-
--- Thunder (random interval, like the horn)
 
 function SoundController.InitThunder()
 	local SoundConst = Constants.Sound
@@ -111,20 +93,29 @@ function SoundController.InitThunder()
 		local Interval = math.random(SoundConst.THUNDER_MIN_INTERVAL, SoundConst.THUNDER_MAX_INTERVAL)
 		task.wait(Interval)
 
+		if not ScrollSpeedState.Active then
+			continue
+		end
+
 		local Zone = ZoneCheck.GetState()
 		ThunderSound.Volume = GetZoneVolume(Zone, SoundConst.THUNDER_VOLUME_INSIDE, SoundConst.THUNDER_VOLUME_MEDIUM, SoundConst.THUNDER_VOLUME_OUTSIDE, SoundConst.THUNDER_VOLUME_ROOF)
 		ThunderSound:Play()
 	end
 end
 
--- Wheel Ambience (one per carriage, staggered playback, fades on inside/outside)
-
 local WheelSounds: {Sound} = {}
+local AccelSounds: {Sound} = {}
+local SlowingSounds: {Sound} = {}
 local WheelZoneVolume: number = 0
 local WheelsReady = false
-local LastWheelDebugTime = 0
 
 local WHEEL_VOLUME_LERP_SPEED = 3
+
+local LastTransitionStartTime: number = 0
+local CrossfadeState: string = "idle"
+local CrossfadeElapsed: number = 0
+local ActiveTransitionSounds: {Sound} = {}
+local CapturedBaseVolume: number = 0
 
 local function FadeWheels(Zone: ZoneCheck.Zone)
 	local SoundConst = Constants.Sound
@@ -148,8 +139,20 @@ function SoundController.InitWheels()
 			Sound.Volume = 0
 			Sound.Parent = Obj
 
+			local Accel = AccelTemplate:Clone()
+			Accel.Volume = 0
+			Accel.Looped = false
+			Accel.Parent = Obj
+
+			local Slowing = SlowingTemplate:Clone()
+			Slowing.Volume = 0
+			Slowing.Looped = false
+			Slowing.Parent = Obj
+
 			table.insert(Pairs, { Part = Obj, Sound = Sound })
 			table.insert(WheelSounds, Sound)
+			table.insert(AccelSounds, Accel)
+			table.insert(SlowingSounds, Slowing)
 		end
 	end
 
@@ -166,20 +169,18 @@ function SoundController.InitWheels()
 	ZoneCheck.OnChanged(FadeWheels)
 end
 
--- Whistle / Horn Loop
-
 function SoundController.InitWhistle()
 	local Horn = workspace:WaitForChild("HORN")
 	local Whistle = WhistleTemplate:Clone()
 	Whistle.Parent = Horn
 
 	while true do
-		Whistle:Play()
+		if ScrollSpeedState.Active then
+			Whistle:Play()
+		end
 		task.wait(Constants.Sound.WHISTLE_INTERVAL)
 	end
 end
-
--- Boot
 
 do
 	SoundController.InitInterior()
@@ -188,28 +189,216 @@ do
 	task.spawn(SoundController.InitWhistle)
 	task.spawn(SoundController.InitThunder)
 
-	-- Scale playback speed of ambient sounds based on world scroll speed
+	local WasActive = false
+
 	RunService.PreRender:Connect(function(DeltaTime: number)
+		local IsActive = ScrollSpeedState.Active
+
+		if IsActive and not WasActive then
+			print("[SoundController] Active transition: OFF -> ON")
+			WasActive = true
+
+			local SoundConst = Constants.Sound
+			local Zone = ZoneCheck.GetState()
+			local FadeInInfo = TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+			InteriorSound.Volume = 0
+			if not InteriorSound.IsPlaying then
+				InteriorSound:Play()
+			end
+			TweenService:Create(InteriorSound, FadeInInfo, { Volume = GetZoneVolume(Zone, SoundConst.INTERIOR_VOLUME, SoundConst.INTERIOR_VOLUME_MEDIUM, 0, 0) }):Play()
+
+			RainSound.Volume = 0
+			if not RainSound.IsPlaying then
+				RainSound:Play()
+			end
+			TweenService:Create(RainSound, FadeInInfo, { Volume = GetZoneVolume(Zone, SoundConst.RAIN_VOLUME_INSIDE, SoundConst.RAIN_VOLUME_MEDIUM, SoundConst.RAIN_VOLUME_OUTSIDE, SoundConst.RAIN_VOLUME_ROOF) }):Play()
+
+			BlizzardSound.Volume = 0
+			if not BlizzardSound.IsPlaying then
+				BlizzardSound:Play()
+			end
+			TweenService:Create(BlizzardSound, FadeInInfo, { Volume = GetZoneVolume(Zone, SoundConst.BLIZZARD_VOLUME_INSIDE, SoundConst.BLIZZARD_VOLUME_MEDIUM, SoundConst.BLIZZARD_VOLUME_OUTSIDE, SoundConst.BLIZZARD_VOLUME_ROOF) }):Play()
+
+			WindSound.Volume = 0
+			if not WindSound.IsPlaying then
+				WindSound:Play()
+			end
+			TweenService:Create(WindSound, FadeInInfo, { Volume = GetZoneVolume(Zone, SoundConst.WIND_VOLUME_INSIDE, SoundConst.WIND_VOLUME_MEDIUM, SoundConst.WIND_VOLUME_OUTSIDE, SoundConst.WIND_VOLUME_ROOF) }):Play()
+		end
+
+		if not IsActive then
+			if WasActive then
+				print("[SoundController] Active transition: ON -> OFF")
+				WasActive = false
+			end
+			InteriorSound.Volume = 0
+			RainSound.Volume = 0
+			BlizzardSound.Volume = 0
+			WindSound.Volume = 0
+			if WheelsReady then
+				for _, S in WheelSounds do
+					S.Volume = 0
+				end
+				for _, S in AccelSounds do
+					S.Volume = 0
+				end
+				for _, S in SlowingSounds do
+					S.Volume = 0
+				end
+			end
+			return
+		end
+
 		local SpeedRatio = ScrollSpeedState.SpeedRatio
 
 		BlizzardSound.PlaybackSpeed = math.clamp(SpeedRatio, 1, 1.5)
 		WindSound.PlaybackSpeed = math.clamp(SpeedRatio, 1, 1.5)
 		InteriorSound.PlaybackSpeed = math.max(0.01, SpeedRatio)
 
-		-- Wheels: PlaybackSpeed 0.8–1.2 when moving, 0 at standstill; lerp volume
-		if WheelsReady then
-			local WheelTargetVolume = if SpeedRatio < 0.01 then 0 else WheelZoneVolume * math.clamp(SpeedRatio, 0, 1)
-			local WheelPlayback = if SpeedRatio < 0.01 then 0 else math.clamp(0.8 + 0.4 * (SpeedRatio / 1), 0.8, 1.2)
-			local LerpAlpha = math.clamp(DeltaTime * WHEEL_VOLUME_LERP_SPEED, 0, 1)
+		if not WheelsReady then
+			return
+		end
 
-			for _, WheelSound in WheelSounds do
-				if SpeedRatio < 0.01 then
-					WheelSound.Volume = 0
-				else
-					WheelSound.Volume += (WheelTargetVolume - WheelSound.Volume) * LerpAlpha
+		local SoundConst = Constants.Sound
+		local Transition = ScrollSpeedState.Transition
+		local FadeDuration = SoundConst.WHEEL_TRANSITION_FADE_TIME
+
+		if Transition then
+			local IsNew = Transition.StartTime ~= LastTransitionStartTime
+			if IsNew then
+				LastTransitionStartTime = Transition.StartTime
+				local IsDecelerating = Transition.EndSpeed == 0 and Transition.StartSpeed > 0
+				local IsAccelerating = Transition.StartSpeed == 0 and Transition.EndSpeed > 0
+
+				if IsDecelerating then
+					for _, S in AccelSounds do
+						S:Stop()
+					end
+
+					CapturedBaseVolume = if WheelSounds[1] then WheelSounds[1].Volume else WheelZoneVolume
+
+					local SlowingSpeed = math.clamp(SlowingTemplate.TimeLength / Transition.Duration, 0.25, 4)
+					for _, S in SlowingSounds do
+						S.PlaybackSpeed = SlowingSpeed
+						S.Volume = 0
+						S.TimePosition = 0
+						S:Play()
+					end
+
+					ActiveTransitionSounds = SlowingSounds
+					CrossfadeState = "fade_to_transition"
+					CrossfadeElapsed = 0
+
+				elseif IsAccelerating then
+					for _, S in SlowingSounds do
+						S:Stop()
+					end
+
+					CapturedBaseVolume = WheelZoneVolume
+
+					for _, S in AccelSounds do
+						S.PlaybackSpeed = 1
+						S.Volume = 0
+						S.TimePosition = 0
+						S:Play()
+					end
+
+					ActiveTransitionSounds = AccelSounds
+					CrossfadeState = "fade_to_transition"
+					CrossfadeElapsed = 0
 				end
-				WheelSound.PlaybackSpeed = WheelPlayback
 			end
+		end
+
+		if CrossfadeState == "fade_to_transition" then
+			CrossfadeElapsed += DeltaTime
+			local Raw = math.clamp(CrossfadeElapsed / FadeDuration, 0, 1)
+			local TransAlpha = math.sqrt(Raw)
+			local LoopAlpha = math.sqrt(1 - Raw)
+
+			for _, S in WheelSounds do
+				S.Volume = CapturedBaseVolume * LoopAlpha
+			end
+			for _, S in ActiveTransitionSounds do
+				S.Volume = CapturedBaseVolume * TransAlpha
+			end
+
+			if Raw >= 1 then
+				CrossfadeState = "transition"
+			end
+
+		elseif CrossfadeState == "transition" then
+			for _, S in ActiveTransitionSounds do
+				if S.IsPlaying then
+					S.Volume = WheelZoneVolume
+				end
+			end
+			for _, S in WheelSounds do
+				S.Volume = 0
+			end
+
+			if ActiveTransitionSounds == AccelSounds and AccelSounds[1] then
+				if AccelSounds[1].IsPlaying then
+					local Remaining = AccelSounds[1].TimeLength - AccelSounds[1].TimePosition
+					if Remaining <= FadeDuration then
+						CapturedBaseVolume = WheelZoneVolume
+						CrossfadeState = "fade_to_loop"
+						CrossfadeElapsed = FadeDuration - Remaining
+					end
+				else
+					CapturedBaseVolume = WheelZoneVolume
+					CrossfadeState = "fade_to_loop"
+					CrossfadeElapsed = 0
+				end
+			end
+
+			if ActiveTransitionSounds == SlowingSounds then
+				local AnyPlaying = false
+				for _, S in SlowingSounds do
+					if S.IsPlaying then
+						AnyPlaying = true
+						break
+					end
+				end
+				if not AnyPlaying then
+					CrossfadeState = "idle"
+				end
+			end
+
+		elseif CrossfadeState == "fade_to_loop" then
+			CrossfadeElapsed += DeltaTime
+			local Raw = math.clamp(CrossfadeElapsed / FadeDuration, 0, 1)
+			local LoopAlpha = math.sqrt(Raw)
+			local TransAlpha = math.sqrt(1 - Raw)
+
+			local LoopTargetVol = WheelZoneVolume * math.clamp(SpeedRatio, 0, 1)
+
+			for _, S in WheelSounds do
+				S.Volume = LoopTargetVol * LoopAlpha
+			end
+			for _, S in ActiveTransitionSounds do
+				S.Volume = CapturedBaseVolume * TransAlpha
+			end
+
+			if Raw >= 1 then
+				CrossfadeState = "idle"
+				for _, S in ActiveTransitionSounds do
+					S:Stop()
+				end
+			end
+
+		else -- idle
+			local TargetVol = if SpeedRatio < 0.01 then 0 else WheelZoneVolume * math.clamp(SpeedRatio, 0, 1)
+			local LerpAlpha = math.clamp(DeltaTime * WHEEL_VOLUME_LERP_SPEED, 0, 1)
+			for _, S in WheelSounds do
+				S.Volume += (TargetVol - S.Volume) * LerpAlpha
+			end
+		end
+
+		local WheelPlayback = if SpeedRatio < 0.01 then 0 else math.clamp(0.8 + 0.4 * (SpeedRatio / 1), 0.8, 1.2)
+		for _, WheelSound in WheelSounds do
+			WheelSound.PlaybackSpeed = WheelPlayback
 		end
 	end)
 end

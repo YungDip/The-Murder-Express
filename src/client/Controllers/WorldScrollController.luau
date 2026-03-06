@@ -9,8 +9,6 @@ local ScrollSpeedState = require(script.Parent.ScrollSpeedState)
 
 local WorldScrollController = {}
 
--- Types
-
 type Lane = {
 	Pool: {Model | BasePart},
 	AnchorCFrame: CFrame,
@@ -31,8 +29,6 @@ type OneShotTile = {
 	TileWidth: number,
 }
 
--- State
-
 local ZoneModels: Folder = nil :: any
 
 local ConstantLanes: {Lane} = {}
@@ -49,7 +45,6 @@ local ServerScrollState: Types.ScrollState = {
 local _ActiveSceneryNames: {string} = {}
 local CurrentPhase: Types.SceneryPhase = "Looping"
 
--- Tunnel transition state
 local TunnelData: {
 	NewScenery: {string},
 	TunnelLeadingEdge: number,
@@ -57,17 +52,13 @@ local TunnelData: {
 	OldSceneryHidden: boolean,
 }? = nil
 
--- Scene state
 local SceneInstance: (Model | BasePart)? = nil
 local SceneStopDistance: number = 0
 local SceneTailInstances: {Model | BasePart} = {}
 
--- Wheel data
 local Wheels: {{Mesh: MeshPart, Origin: CFrame, Radius: number}} = {}
 
 local Initialized = false
-
--- Helpers
 
 local function GetBoundsX(Object: Instance): number
 	if Object:IsA("Model") then
@@ -77,7 +68,9 @@ local function GetBoundsX(Object: Instance): number
 	return (Object :: BasePart).Size.X
 end
 
--- One-shot tiles are rotated -90° around Y, so their scroll-direction extent is the Z axis
+--[[
+    returns the scroll-direction width (Z axis) of a one-shot tile
+]]
 local function GetOneShotScrollWidth(Object: Instance): number
 	if Object:IsA("Model") then
 		local _, Size = Object:GetBoundingBox()
@@ -95,13 +88,13 @@ local function CreateLaneFromTemplate(Config: Types.LaneConfig): Lane
 	local PoolSize = Config.PoolSize or Constants.WorldScroll.TILE_POOL_SIZE
 	local TileWidth = GetBoundsX(Template)
 
-	-- Use the template's stored pivot as the anchor position
 	local AnchorCFrame = Template:GetPivot()
 
 	local Pool: {Model | BasePart} = {}
 	for Index = 1, PoolSize do
 		local Clone = Template:Clone()
 		Clone.Name = Config.ModelName
+		Clone:PivotTo(CFrame.new(0, -1000, 0))
 		Clone.Parent = workspace
 		Pool[Index] = Clone
 	end
@@ -168,12 +161,10 @@ local function _UpdateLaneDraining(LaneData: Lane, CurrentDistance: number)
 	local AllOffscreen = true
 
 	for Index, Tile in LaneData.Pool do
-		-- Snapshot each tile's looping position at the moment drain began
 		local RawPos = (Index - 1) * TileWidth - (DrainStart % CycleLen)
 		local WrappedPos = RawPos % CycleLen
 		local OriginalOffset = WrappedPos - HalfSpan
 
-		-- Shift by distance traveled since drain started (no wrapping)
 		local FinalOffset = OriginalOffset - Delta
 
 		if math.abs(FinalOffset) < HalfSpan + TileWidth * 3 then
@@ -195,7 +186,6 @@ local function SpawnOneShotTile(ModelName: string, SpawnDistance: number, Direct
 	Clone.Name = ModelName .. "_OneShot"
 	Clone.Parent = workspace
 
-	-- One-shot tiles are rotated -90deg Y in UpdateOneShotTile, so scroll-direction width is Z
 	local TileWidth = GetOneShotScrollWidth(Template)
 
 	local Tile: OneShotTile = {
@@ -210,8 +200,6 @@ local function SpawnOneShotTile(ModelName: string, SpawnDistance: number, Direct
 end
 
 local function UpdateOneShotTile(Tile: OneShotTile, CurrentDistance: number)
-	-- Tile sits at SpawnDistance in world-distance space
-	-- Offset = how far ahead (+) or behind (-) the tile is from the anchor
 	local Offset = Tile.SpawnDistance - CurrentDistance
 	Tile.Instance:PivotTo(Tile.AnchorCFrame * CFrame.new(Tile.Direction * Offset, 0, 0) * CFrame.Angles(0, math.rad(-90), 0))
 end
@@ -227,13 +215,11 @@ local function CleanupOneShotTile(Tile: OneShotTile)
 end
 
 local function SpawnSceneryLanes(SceneryNames: {string})
-	-- Destroy old scenery lanes
 	for _, Lane in SceneryLanes do
 		DestroyLane(Lane)
 	end
 	table.clear(SceneryLanes)
 
-	-- Create new ones
 	for _, Name in SceneryNames do
 		local Lane = CreateLaneFromTemplate({
 			ModelName = Name,
@@ -259,7 +245,9 @@ local function CleanupScene()
 	table.clear(SceneTailInstances)
 end
 
--- Decode flattened Scroll* prefixed fields into our typed ScrollState
+--[[
+    decodes flat Scroll*-prefixed fields into a typed ScrollState
+]]
 local function DecodeFlatScrollState(Data: {[string]: any}): Types.ScrollState
 	local State: Types.ScrollState = {
 		BaseDistance = Data.ScrollBaseDistance,
@@ -280,7 +268,9 @@ local function DecodeFlatScrollState(Data: {[string]: any}): Types.ScrollState
 	return State
 end
 
--- Decode non-prefixed ScrollState fields (used by SpeedUpdate)
+--[[
+    decodes non-prefixed fields into a typed ScrollState
+]]
 local function DecodeScrollState(Data: {[string]: any}): Types.ScrollState
 	local State: Types.ScrollState = {
 		BaseDistance = Data.BaseDistance,
@@ -301,7 +291,9 @@ local function DecodeScrollState(Data: {[string]: any}): Types.ScrollState
 	return State
 end
 
--- Initialise constant lanes (Tracks, Baseplate) — these never change
+--[[
+    initialises the constant looping lanes (tracks, baseplate)
+]]
 local function InitConstantLanes()
 	for _, Lane in ConstantLanes do
 		DestroyLane(Lane)
@@ -314,15 +306,11 @@ local function InitConstantLanes()
 	end
 end
 
--- Public API
-
 function WorldScrollController.GetSpeedRatio(): number
 	local ServerNow = workspace:GetServerTimeNow()
 	local _, CurrentSpeed = ScrollCompute.GetDistance(ServerScrollState, ServerNow)
 	return math.max(0, CurrentSpeed / Constants.WorldScroll.BASELINE_SPEED)
 end
-
--- Network listeners
 
 WorldScrollNetwork.packets.SyncState.listen(function(Data)
 	ServerScrollState = DecodeFlatScrollState(Data)
@@ -332,8 +320,6 @@ WorldScrollNetwork.packets.SyncState.listen(function(Data)
 		InitConstantLanes()
 		Initialized = true
 	end
-
-	-- Set up scenery to match server state
 	SpawnSceneryLanes(Data.ActiveScenery)
 end)
 
@@ -346,10 +332,8 @@ WorldScrollNetwork.packets.TunnelTransition.listen(function(Data)
 	local CurrentDistance = ScrollCompute.GetDistance(ServerScrollState, ServerNow)
 
 	local TunnelTemplate = GetTemplate(Data.TunnelModel)
-	-- One-shot tiles are rotated -90deg Y, so effective scroll width is Z axis
 	local TunnelWidth = GetOneShotScrollWidth(TunnelTemplate)
 
-	-- Place tunnel a fixed buffer ahead; scenery keeps looping until tunnel passes
 	local Buffer = Constants.WorldScroll.TUNNEL_BUFFER
 	local TunnelSpawnDistance = CurrentDistance + Buffer + TunnelWidth / 2
 	local TunnelLeadingEdge = TunnelSpawnDistance - TunnelWidth / 2
@@ -383,7 +367,6 @@ WorldScrollNetwork.packets.SceneStop.listen(function(Data)
 	CurrentPhase = "SceneStopping"
 	SceneStopDistance = Data.StopDistance
 
-	-- Spawn the scene model at the stop distance
 	if Data.SceneModel ~= "" then
 		local Template = GetTemplate(Data.SceneModel)
 		local Clone = Template:Clone()
@@ -392,7 +375,6 @@ WorldScrollNetwork.packets.SceneStop.listen(function(Data)
 		SceneInstance = Clone
 	end
 
-	-- Spawn tail scenery as static dressing after the scene
 	for _, Name in Data.TailScenery do
 		local Template = GetTemplate(Name)
 		local Clone = Template:Clone()
@@ -406,19 +388,14 @@ WorldScrollNetwork.packets.SceneResume.listen(function(Data)
 	ServerScrollState = DecodeFlatScrollState(Data)
 	CurrentPhase = "SceneResuming"
 
-	-- Clean up static scene pieces
 	CleanupScene()
 
-	-- Spawn new looping scenery
 	SpawnSceneryLanes(Data.TransitionScenery)
 end)
-
--- Boot
 
 do
 	ZoneModels = ReplicatedStorage:WaitForChild("ZoneModels") :: Folder
 
-	-- Collect wheel data for cosmetic rotation
 	for _, Obj in workspace:QueryDescendants("MeshPart") do
 		if string.find(Obj.Name, "Train_Wheel") and not string.find(Obj.Name, "Part") then
 			table.insert(Wheels, {
@@ -429,7 +406,6 @@ do
 		end
 	end
 
-	-- Request authoritative state from server
 	local StateData = WorldScrollNetwork.queries.RequestState.invoke(nil)
 	ServerScrollState = DecodeFlatScrollState(StateData)
 	CurrentPhase = StateData.Phase :: Types.SceneryPhase
@@ -437,24 +413,58 @@ do
 	SpawnSceneryLanes(StateData.ActiveScenery)
 	Initialized = true
 
-	-- Main render loop
+	local WasActive = false
+
 	RunService.PreRender:Connect(function()
 		if not Initialized then
+			return
+		end
+
+		local IsActive = ScrollSpeedState.Active
+
+		if IsActive and not WasActive then
+			print("[WorldScrollController] Active transition: OFF -> ON")
+			WasActive = true
+		elseif not IsActive and WasActive then
+			print("[WorldScrollController] Active transition: ON -> OFF")
+			WasActive = false
+		end
+
+		if not IsActive then
+			ScrollSpeedState.SpeedRatio = 0
+			ScrollSpeedState.Transition = nil
+			for _, LaneData in ConstantLanes do
+				for _, Tile in LaneData.Pool do
+					Tile:PivotTo(CFrame.new(0, -1000, 0))
+				end
+			end
+			for _, LaneData in SceneryLanes do
+				for _, Tile in LaneData.Pool do
+					Tile:PivotTo(CFrame.new(0, -1000, 0))
+				end
+			end
+			for _, Tile in OneShotTiles do
+				Tile.Instance:PivotTo(CFrame.new(0, -1000, 0))
+			end
 			return
 		end
 
 		local ServerNow = workspace:GetServerTimeNow()
 		local Distance, CurrentSpeed = ScrollCompute.GetDistance(ServerScrollState, ServerNow)
 
-		-- Update shared speed state for other controllers
 		ScrollSpeedState.SpeedRatio = math.max(0, CurrentSpeed / Constants.WorldScroll.BASELINE_SPEED)
 
-		-- Update constant lanes (always looping)
+		local Trans = ServerScrollState.Transition
+		if Trans and (ServerNow - Trans.StartTime) < Trans.Duration then
+			ScrollSpeedState.Transition = Trans
+		else
+			ScrollSpeedState.Transition = nil
+		end
+
 		for _, LaneData in ConstantLanes do
 			UpdateLaneLooping(LaneData, Distance)
 		end
 
-		-- Update scenery lanes based on current phase
 		if CurrentPhase == "Looping" or CurrentPhase == "SceneResuming" then
 			for _, LaneData in SceneryLanes do
 				UpdateLaneLooping(LaneData, Distance)
@@ -462,7 +472,6 @@ do
 
 		elseif CurrentPhase == "TunnelIncoming" then
 			if TunnelData then
-				-- Keep scenery looping until tunnel leading edge covers the player
 				if not TunnelData.OldSceneryHidden then
 					for _, LaneData in SceneryLanes do
 						UpdateLaneLooping(LaneData, Distance)
@@ -477,8 +486,7 @@ do
 					end
 				end
 
-				-- When tunnel trailing edge passes, spawn new scenery
-				if Distance >= TunnelData.TunnelTrailingEdge then
+			if Distance >= TunnelData.TunnelTrailingEdge then
 					SpawnSceneryLanes(TunnelData.NewScenery)
 					CurrentPhase = "Looping"
 					TunnelData = nil
@@ -486,12 +494,10 @@ do
 			end
 
 		elseif CurrentPhase == "SceneStopping" then
-			-- Scenery keeps looping while decelerating
 			for _, LaneData in SceneryLanes do
 				UpdateLaneLooping(LaneData, Distance)
 			end
 
-			-- Position scene model relative to the stop point
 			if SceneInstance and SceneInstance.Parent then
 				local SceneOffset = SceneStopDistance - Distance
 				local RefAnchor = if #ConstantLanes > 0
@@ -503,7 +509,6 @@ do
 				SceneInstance:PivotTo(RefAnchor * CFrame.new(RefDir * SceneOffset, 0, 0))
 			end
 
-			-- Position tail instances
 			local TailOffset = 0
 			if SceneInstance then
 				TailOffset = GetBoundsX(SceneInstance)
@@ -520,13 +525,11 @@ do
 				Inst:PivotTo(RefAnchor * CFrame.new(RefDir * InstOffset, 0, 0))
 			end
 
-			-- Check if we've stopped
 			if CurrentSpeed <= 0.01 then
 				CurrentPhase = "SceneStopped"
 			end
 
 		elseif CurrentPhase == "SceneStopped" then
-			-- Everything is static, just maintain positions
 			if SceneInstance and SceneInstance.Parent then
 				local SceneOffset = SceneStopDistance - Distance
 				local RefAnchor = if #ConstantLanes > 0
@@ -539,19 +542,16 @@ do
 			end
 		end
 
-		-- Update one-shot tiles (tunnels etc.)
 		for TileIndex = #OneShotTiles, 1, -1 do
 			local Tile = OneShotTiles[TileIndex]
 			UpdateOneShotTile(Tile, Distance)
 
-			-- Clean up once tile has fully scrolled past (trailing edge + generous margin)
 			local BehindBy = Distance - Tile.SpawnDistance
 			if BehindBy > Tile.TileWidth * 2 then
 				CleanupOneShotTile(Tile)
 			end
 		end
 
-		-- Spin wheels (cosmetic, derived from synced distance)
 		for _, Wheel in Wheels do
 			local Angle = Distance / Wheel.Radius
 			Wheel.Mesh.CFrame = Wheel.Origin * CFrame.Angles(0, 0, Angle)

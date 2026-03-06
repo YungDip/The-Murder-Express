@@ -1,9 +1,7 @@
--- Lightweight shared state for scroll speed ratio.
--- WorldScrollController writes this each frame; other controllers read it.
--- No yields, so require() completes instantly.
-
 local ScrollSpeedState = {
-	SpeedRatio = 1,
+	SpeedRatio = 0,
+	Transition = nil :: {StartSpeed: number, EndSpeed: number, StartTime: number, Duration: number}?,
+	Active = false,
 }
 
 return ScrollSpeedState

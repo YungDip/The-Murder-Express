@@ -22,8 +22,6 @@ local function ApplyDeathVelocity()
 	})
 end
 
--- Boot
-
 local function OnCharacterAdded(Character: Model)
 	Applied = false
 	local Humanoid = Character:WaitForChild("Humanoid") :: Humanoid

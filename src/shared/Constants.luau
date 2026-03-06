@@ -11,7 +11,8 @@ Constants.Sound = {
 	WHEEL_VOLUME_ROOF = 1.0,
 	WHEEL_VOLUME_OUTSIDE = 0.75,
 	WHEEL_VOLUME_MEDIUM = 0.425,
-	WHEEL_VOLUME_INSIDE = 0.1,
+	WHEEL_VOLUME_INSIDE = 0.25,
+	WHEEL_TRANSITION_FADE_TIME = 0.5,
 	WHISTLE_INTERVAL = 25,
 	INTERIOR_VOLUME = 0.1,
 	INTERIOR_VOLUME_MEDIUM = 0.05,
@@ -150,5 +151,55 @@ Constants.Announcement = {
 }
 
 Constants.VERSION = "0.1.0"
+
+Constants.Round = {
+	MIN_PLAYERS = 3,
+	INTERMISSION_DURATION = 15,
+	ROLE_REVEAL_DELAY = 5,
+	ROUND_DURATION = 180,
+	POST_ROUND_DURATION = 8,
+	TELEPORT_FADE_DURATION = 1.5,
+	DEATH_RAGDOLL_WAIT = 3,
+	DEATH_FADE_DURATION = 3,
+
+	-- Roulette
+	ROULETTE_SPIN_DURATION = 3.5,
+	ROULETTE_SLOT_HEIGHT = 50,
+	ROULETTE_VISIBLE_SLOTS = 1,
+	ROULETTE_TOTAL_CYCLES = 10,
+
+	-- Timer UI
+	TIMER_WIDTH = 0.12,
+	TIMER_HEIGHT = 40,
+	TIMER_FONT = "rbxasset://fonts/families/HighwayGothic.json",
+	TIMER_TEXT_SIZE = 28,
+	TIMER_TEXT_COLOR = Color3.fromRGB(234, 224, 152),
+	TIMER_BG_COLOR = Color3.fromRGB(40, 32, 24),
+	TIMER_BORDER_COLOR = Color3.fromRGB(234, 224, 152),
+	TIMER_WARNING_THRESHOLD = 30,
+	TIMER_WARNING_COLOR = Color3.fromRGB(200, 50, 40),
+
+	-- Role Colors
+	ROLE_COLORS = {
+		Innocent = Color3.fromRGB(234, 224, 152),
+		Detective = Color3.fromRGB(80, 140, 220),
+		Murderer = Color3.fromRGB(200, 50, 40),
+	},
+
+	-- Scoreboard
+	SCOREBOARD_WIDTH = 0.4,
+	SCOREBOARD_ROW_HEIGHT = 36,
+	SCOREBOARD_HEADER_SIZE = 32,
+	SCOREBOARD_ROW_TEXT_SIZE = 22,
+	SCOREBOARD_BG_COLOR = Color3.fromRGB(40, 32, 24),
+	SCOREBOARD_TEXT_COLOR = Color3.fromRGB(234, 224, 152),
+
+	-- Result display text
+	RESULT_TEXT = {
+		MurdererWin = "Murderer Wins!",
+		DetectiveWin = "Detective Wins!",
+		PassengersWin = "Passengers Survive!",
+	},
+}
 
 return Constants

@@ -7,8 +7,6 @@ local WorldScrollNetwork = require(ReplicatedStorage.Shared.Network.WorldScrollN
 
 local WorldScrollService = {}
 
--- Internal state
-
 local ScrollState: Types.ScrollState = {
 	BaseDistance = 0,
 	BaseTime = 0,
@@ -19,8 +17,6 @@ local ScrollState: Types.ScrollState = {
 local ActiveScenery: {string} = {}
 local CurrentPhase: Types.SceneryPhase = "Looping"
 local CurrentSceneModel: string = ""
-
--- Helpers
 
 local function Now(): number
 	return workspace:GetServerTimeNow()
@@ -42,7 +38,6 @@ end
 
 local function BroadcastSpeedUpdate()
 	local Encoded = EncodeFlatScrollState(ScrollState)
-	-- SpeedUpdate uses non-prefixed field names
 	WorldScrollNetwork.packets.SpeedUpdate.sendToAll({
 		BaseDistance = Encoded.ScrollBaseDistance,
 		BaseTime = Encoded.ScrollBaseTime,
@@ -55,7 +50,9 @@ local function BroadcastSpeedUpdate()
 	})
 end
 
--- Finalise a speed transition once its duration has elapsed
+--[[
+    finalises a speed transition once its duration has elapsed
+]]
 local function FinaliseTransition()
 	local Transition = ScrollState.Transition
 	if not Transition then
@@ -66,9 +63,9 @@ local function FinaliseTransition()
 	ScrollState = ScrollCompute.Snapshot(ScrollState, EndTime)
 end
 
--- Public API
-
--- Change the scroll speed with a smooth transition over TransitionTime seconds
+--[[
+    changes the scroll speed with a smooth transition over TransitionTime seconds
+]]
 function WorldScrollService.ChangeSpeed(Speed: number, TransitionTime: number)
 	local CurrentTime = Now()
 	ScrollState = ScrollCompute.Snapshot(ScrollState, CurrentTime)
@@ -93,7 +90,9 @@ function WorldScrollService.ChangeSpeed(Speed: number, TransitionTime: number)
 	end
 end
 
--- Tunnel transition: drain old scenery, show tunnel, then start new scenery
+--[[
+    drains old scenery through a tunnel, then starts new looping scenery
+]]
 function WorldScrollService.TunnelTransition(NewScenery: {string})
 	local CurrentTime = Now()
 	ScrollState = ScrollCompute.Snapshot(ScrollState, CurrentTime)
@@ -101,13 +100,11 @@ function WorldScrollService.TunnelTransition(NewScenery: {string})
 	local CurrentDistance = ScrollState.BaseDistance
 	local Speed = ScrollState.Speed
 
-	-- Server estimate: buffer + tunnel width + margin; client handles exact timing
 	local EstimatedTransitionDistance = Constants.WorldScroll.TUNNEL_BUFFER + 1000
 
 	CurrentPhase = "TunnelDraining"
 
 	print("[WorldScrollService] TunnelTransition: Distance=" .. string.format("%.1f", CurrentDistance) .. " Speed=" .. string.format("%.1f", Speed))
-
 	WorldScrollNetwork.packets.TunnelTransition.sendToAll({
 		NewScenery = NewScenery,
 		TunnelModel = Constants.WorldScroll.TUNNEL_MODEL,
@@ -116,11 +113,9 @@ function WorldScrollService.TunnelTransition(NewScenery: {string})
 		NewSceneryAtDistance = CurrentDistance + EstimatedTransitionDistance,
 	})
 
-	-- After the estimated transition time, update server state
 	if Speed > 0 then
 		local TimeToNewScenery = EstimatedTransitionDistance / Speed
-		print("[WorldScrollService] EstTimeToNewScenery=" .. string.format("%.1f", TimeToNewScenery) .. "s")
-		task.delay(TimeToNewScenery, function()
+		print("[WorldScrollService] EstTimeToNewScenery=" .. string.format("%.1f", TimeToNewScenery) .. "s")		task.delay(TimeToNewScenery, function()
 			ActiveScenery = NewScenery
 			CurrentPhase = "Looping"
 			print("[WorldScrollService] Tunnel transition complete, phase=Looping")
@@ -131,7 +126,9 @@ function WorldScrollService.TunnelTransition(NewScenery: {string})
 	end
 end
 
--- Stop at a scene: decelerate to 0, place a scene model, add tail scenery
+--[[
+    decelerates to a stop and plays a scene model at the stop position
+]]
 function WorldScrollService.StopAtNewScene(SceneComponents: {string}, TailRepeats: number?)
 	local CurrentTime = Now()
 	ScrollState = ScrollCompute.Snapshot(ScrollState, CurrentTime)
@@ -152,7 +149,6 @@ function WorldScrollService.StopAtNewScene(SceneComponents: {string}, TailRepeat
 	CurrentPhase = "SceneStopping"
 	CurrentSceneModel = if #SceneComponents > 0 then SceneComponents[1] else ""
 
-	-- Build tail scenery: repeat the full scenery set N times beyond the scene for a visual buffer
 	local Repeats = TailRepeats or Constants.WorldScroll.SCENE_TAIL_REPEATS
 	local TailScenery: {string} = {}
 	for _ = 1, Repeats do
@@ -185,7 +181,9 @@ function WorldScrollService.StopAtNewScene(SceneComponents: {string}, TailRepeat
 	end)
 end
 
--- Resume from a stopped scene back into scrolling scenery
+--[[
+    accelerates from a stopped scene back into looping scrolling scenery
+]]
 function WorldScrollService.ResumeFromScene(TransitionScenery: {string}?, Speed: number?, TransitionTime: number?)
 	local CurrentTime = Now()
 	ScrollState = ScrollCompute.Snapshot(ScrollState, CurrentTime)
@@ -223,7 +221,6 @@ function WorldScrollService.ResumeFromScene(TransitionScenery: {string}?, Speed:
 	end)
 end
 
--- Player join sync: client requests state via query
 WorldScrollNetwork.queries.RequestState.listen(function()
 	local Flat = EncodeFlatScrollState(ScrollState)
 	Flat.ActiveScenery = ActiveScenery
@@ -232,7 +229,6 @@ WorldScrollNetwork.queries.RequestState.listen(function()
 	return Flat
 end)
 
--- Boot
 do
 	local CurrentTime = Now()
 	ScrollState = {
@@ -242,7 +238,6 @@ do
 		Transition = nil,
 	}
 
-	-- Start the initial scenery via tunnel transition (loads LeftMountains + RightMountains)
 	ActiveScenery = { "LeftMountains", "RightMountains" }
 	CurrentPhase = "Looping"
 end

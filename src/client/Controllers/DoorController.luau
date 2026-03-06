@@ -10,14 +10,12 @@ local DOOR_TAGS = { "CarDoor", "SideDoor", "CabinDoor" }
 
 local DoorController = {}
 
--- Sound mapping: tag -> { Open = soundName, Close = soundName }
 local SOUND_MAP = {
 	CarDoor = { Open = "InnerCarDoorOpen", Close = "InnerCarDoorClose" },
 	SideDoor = { Open = "SideCarDoorOpen", Close = "SideCarDoorClose" },
 	CabinDoor = { Open = "WoodDoorOpen", Close = "WoodDoorClose" },
 }
 
--- Track original pivots and active animations
 local OriginalPivots: { [Model]: CFrame } = {}
 local ActiveAnimations: { [Model]: thread } = {}
 
@@ -102,7 +100,6 @@ local function AnimateDoor(Door: Model, IsOpen: boolean)
 	end)
 end
 
--- Listen for door state changes from server
 DoorNetwork.packets.DoorState.listen(function(Data: { Door: Instance, IsOpen: boolean })
 	local Door = Data.Door
 	local IsOpen = Data.IsOpen

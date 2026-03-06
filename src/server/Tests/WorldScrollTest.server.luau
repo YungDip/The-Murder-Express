@@ -1,60 +1,59 @@
--- WorldScroll integration test — runs through all service methods with debug prints
-
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
+local Constants = require(ReplicatedStorage.Shared.Constants)
 local WorldScrollService = require(ServerScriptService.Server.Services.WorldScrollService)
+local AnnouncementService = require(ServerScriptService.Server.Services.AnnouncementService)
+local RoundService = require(ServerScriptService.Server.Services.RoundService)
+
+local DefaultSpeed = Constants.WorldScroll.DEFAULT_SPEED
 
 local function Log(Message: string)
 	print("[WorldScrollTest]", os.clock(), Message)
 end
 
--- Give everything a moment to boot
+local function RunCoalSequence()
+	Log("=== Coal Sequence Start ===")
+
+	Log("Running at default speed for 30s")
+	task.wait(30)
+
+	Log("Warning: train out of coal")
+	AnnouncementService.AnnounceAll("The train has run out of coal!", nil, 5, true)
+
+	Log("ChangeSpeed → 0 over 10s")
+	WorldScrollService.ChangeSpeed(0, 10)
+	task.wait(10)
+
+	Log("Stopped for 30s")
+	task.wait(30)
+
+	Log("Announcement: coal found")
+	AnnouncementService.AnnounceAll("Coal has been found!", nil, 5, false)
+	Log("ChangeSpeed → " .. DefaultSpeed .. " over 5s")
+	WorldScrollService.ChangeSpeed(DefaultSpeed, 5)
+	task.wait(5)
+
+	Log("Waiting 20s before tunnel")
+	task.wait(20)
+
+	Log("TunnelTransition → {LeftMountains, RightMountains}")
+	WorldScrollService.TunnelTransition({ "LeftMountains", "RightMountains" })
+
+	Log("=== Coal Sequence Complete ===")
+end
+
 task.wait(3)
 
-Log("=== Starting WorldScroll Test Sequence ===")
+while true do
+	while RoundService.GetPhase() ~= "InProgress" do
+		task.wait(0.5)
+	end
 
--- 1. Normal speed for a bit
-Log("Running at default speed (125) for 5s")
-task.wait(5)
+	Log("Round started — launching coal sequence")
+	task.spawn(RunCoalSequence)
 
--- 2. Speed up to 400
-Log("ChangeSpeed → 400 over 2s")
-WorldScrollService.ChangeSpeed(400, 2)
-task.wait(5)
-
--- 3. Slow to 0
-Log("ChangeSpeed → 0 over 5s")
-WorldScrollService.ChangeSpeed(0, 5)
-task.wait(6)
-
--- 4. Back to 150
-Log("ChangeSpeed → 150 over 5s")
-WorldScrollService.ChangeSpeed(150, 5)
-task.wait(6)
-
--- 5. Stop again
-Log("ChangeSpeed → 0 over 5s")
-WorldScrollService.ChangeSpeed(0, 5)
-task.wait(6)
-
--- 6. Back to 150
-Log("ChangeSpeed → 150 over 5s")
-WorldScrollService.ChangeSpeed(150, 5)
-task.wait(6)
-
--- 7. Final stop
-Log("ChangeSpeed → 0 over 5s")
-WorldScrollService.ChangeSpeed(0, 5)
-task.wait(6)
-
--- 8. Speed back up for tunnel
-Log("ChangeSpeed → 150 over 3s")
-WorldScrollService.ChangeSpeed(150, 3)
-task.wait(5)
-
--- 9. Tunnel transition
-Log("TunnelTransition → {LeftMountains, RightMountains}")
-WorldScrollService.TunnelTransition({ "LeftMountains", "RightMountains" })
-task.wait(15)
-
-Log("=== WorldScroll Test Sequence Complete ===")
+	while RoundService.GetPhase() == "InProgress" do
+		task.wait(0.5)
+	end
+end

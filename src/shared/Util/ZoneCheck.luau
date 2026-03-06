@@ -14,8 +14,6 @@ local MAX_CHECK_DISTANCE = 50
 local Params = OverlapParams.new()
 Params.FilterType = Enum.RaycastFilterType.Include
 
--- Helpers
-
 local function GetPlayerRoot(): BasePart?
 	local Character = Player.Character
 	if not Character then return nil end
@@ -53,8 +51,6 @@ local function CheckState(): Zone
 	return "Outside"
 end
 
--- Public API
-
 function ZoneCheck.GetState(): Zone
 	return CurrentState
 end
@@ -71,8 +67,6 @@ function ZoneCheck.OnChanged(Callback: (Zone: Zone) -> ())
 	table.insert(Listeners, Callback)
 	Callback(CurrentState)
 end
-
--- Boot
 
 task.spawn(function()
 	while true do

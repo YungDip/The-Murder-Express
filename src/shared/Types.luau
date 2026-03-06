@@ -25,4 +25,18 @@ export type ScrollState = {
 
 export type SceneryPhase = "Looping" | "TunnelDraining" | "TunnelIncoming" | "SceneStopping" | "SceneStopped" | "SceneResuming"
 
+-- Round
+
+export type Role = "Murderer" | "Detective" | "Innocent"
+
+export type RoundPhase = "Intermission" | "Teleporting" | "RoleReveal" | "InProgress" | "PostRound"
+
+export type PostRoundResult = "MurdererWin" | "DetectiveWin" | "PassengersWin"
+
+export type EliminatedEntry = {
+	Name: string,
+	Role: Role,
+	UserId: number,
+}
+
 return Types

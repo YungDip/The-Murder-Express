@@ -1,7 +1,9 @@
 local TweenService = game:GetService("TweenService")
+local SoundService = game:GetService("SoundService")
 
 local AnnouncementNetwork = require(game:GetService("ReplicatedStorage").Shared.Network.AnnouncementNetwork)
 local Constants = require(game:GetService("ReplicatedStorage").Shared.Constants)
+local LayeredSound = require(game:GetService("ReplicatedStorage").Shared.Util.LayeredSound)
 
 local AnnouncementConst = Constants.Announcement
 local Player = game:GetService("Players").LocalPlayer
@@ -12,6 +14,9 @@ local AnnouncementController = {}
 
 local Queue: { { Title: string, Subtitle: string?, Duration: number?, IsWarning: boolean? } } = {}
 local IsShowing = false
+
+local OnShowCallbacks: { () -> () } = {}
+local OnHideCallbacks: { () -> () } = {}
 
 local BEIGE = AnnouncementConst.TEXT_COLOR
 local BG_COLOR = AnnouncementConst.BG_COLOR
@@ -31,7 +36,6 @@ local function IsSmallScreen(): boolean
 	return Camera.ViewportSize.Y < AnnouncementConst.SMALL_THRESHOLD
 end
 
--- Create the ScreenGui once
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "AnnouncementGui"
 ScreenGui.ResetOnSpawn = false
@@ -39,7 +43,9 @@ ScreenGui.IgnoreGuiInset = true
 ScreenGui.DisplayOrder = 100
 ScreenGui.Parent = PlayerGui
 
--- Helper to create border segments (thin frames that grow to simulate snaking)
+--[[
+    creates a named border segment frame anchored and parented to Parent
+]]
 local function CreateBorderSegment(Parent: Frame, AnchorPoint: Vector2, Position: UDim2, InitialSize: UDim2, Name: string, Color: Color3): Frame
 	local Segment = Instance.new("Frame")
 	Segment.Name = Name
@@ -52,22 +58,21 @@ local function CreateBorderSegment(Parent: Frame, AnchorPoint: Vector2, Position
 	return Segment
 end
 
--- Animate all 6 border segments snaking from top center around the box
--- Uses pixel sizes computed from the resolved ContentBox to avoid Scale issues with AutomaticSize parents
+--[[
+    animates 6 border segments snaking around a content box from top-center outward
+    (@yields)
+]]
 local function AnimateBorderIn(BorderContainer: Frame, ContentBox: Frame, Gradients: { UIGradient }?, BorderColor: Color3): { Frame }
 	local T = BORDER_THICKNESS
 
-	-- Wait a frame so layout resolves and AbsoluteSize is accurate
 	task.wait()
 	local BoxSize = ContentBox.AbsoluteSize
 	local W = math.round(BoxSize.X)
 	local H = math.round(BoxSize.Y)
 	local HalfW = math.round(W / 2)
 
-	-- Set the border container to match the content box exactly in pixels
 	BorderContainer.Size = UDim2.fromOffset(W, H)
 
-	-- Top-right: starts at center, grows rightward
 	local TopRight = CreateBorderSegment(
 		BorderContainer,
 		Vector2.new(0, 0),
@@ -77,7 +82,6 @@ local function AnimateBorderIn(BorderContainer: Frame, ContentBox: Frame, Gradie
 		BorderColor
 	)
 
-	-- Top-left: starts at center, grows leftward
 	local TopLeft = CreateBorderSegment(
 		BorderContainer,
 		Vector2.new(1, 0),
@@ -87,7 +91,6 @@ local function AnimateBorderIn(BorderContainer: Frame, ContentBox: Frame, Gradie
 		BorderColor
 	)
 
-	-- Right side: starts at top-right corner, grows downward
 	local RightSide = CreateBorderSegment(
 		BorderContainer,
 		Vector2.new(1, 0),
@@ -97,7 +100,6 @@ local function AnimateBorderIn(BorderContainer: Frame, ContentBox: Frame, Gradie
 		BorderColor
 	)
 
-	-- Left side: starts at top-left corner, grows downward
 	local LeftSide = CreateBorderSegment(
 		BorderContainer,
 		Vector2.new(0, 0),
@@ -107,7 +109,6 @@ local function AnimateBorderIn(BorderContainer: Frame, ContentBox: Frame, Gradie
 		BorderColor
 	)
 
-	-- Bottom-right: starts at bottom-right corner, grows leftward (toward center)
 	local BottomRight = CreateBorderSegment(
 		BorderContainer,
 		Vector2.new(1, 1),
@@ -117,7 +118,6 @@ local function AnimateBorderIn(BorderContainer: Frame, ContentBox: Frame, Gradie
 		BorderColor
 	)
 
-	-- Bottom-left: starts at bottom-left corner, grows rightward (toward center)
 	local BottomLeft = CreateBorderSegment(
 		BorderContainer,
 		Vector2.new(0, 1),
@@ -132,7 +132,6 @@ local function AnimateBorderIn(BorderContainer: Frame, ContentBox: Frame, Gradie
 	local EaseOut = Enum.EasingDirection.Out
 	local EaseIn = Enum.EasingDirection.In
 
-	-- Phase 1: Top halves grow out from center
 	local TweenTopRight = TweenService:Create(TopRight, TweenInfo.new(SegDuration, EaseStyle, EaseOut), {
 		Size = UDim2.fromOffset(HalfW, T),
 	})
@@ -140,7 +139,6 @@ local function AnimateBorderIn(BorderContainer: Frame, ContentBox: Frame, Gradie
 		Size = UDim2.fromOffset(HalfW, T),
 	})
 
-	-- Phase 2: Sides grow downward
 	local TweenRight = TweenService:Create(RightSide, TweenInfo.new(SegDuration, EaseStyle, EaseIn), {
 		Size = UDim2.fromOffset(T, H),
 	})
@@ -148,7 +146,6 @@ local function AnimateBorderIn(BorderContainer: Frame, ContentBox: Frame, Gradie
 		Size = UDim2.fromOffset(T, H),
 	})
 
-	-- Phase 3: Bottom halves grow inward from corners
 	local TweenBottomRight = TweenService:Create(BottomRight, TweenInfo.new(SegDuration, EaseStyle, EaseOut), {
 		Size = UDim2.fromOffset(HalfW, T),
 	})
@@ -156,7 +153,6 @@ local function AnimateBorderIn(BorderContainer: Frame, ContentBox: Frame, Gradie
 		Size = UDim2.fromOffset(HalfW, T),
 	})
 
-	-- Fire gradient reveal for full border duration
 	if Gradients then
 		for _, G in Gradients do
 			TweenService:Create(G, TweenInfo.new(BORDER_SNAKE_DURATION, EaseStyle, EaseOut), {
@@ -165,7 +161,6 @@ local function AnimateBorderIn(BorderContainer: Frame, ContentBox: Frame, Gradie
 		end
 	end
 
-	-- Chain the phases
 	TweenTopRight:Play()
 	TweenTopLeft:Play()
 	TweenTopRight.Completed:Wait()
@@ -181,7 +176,10 @@ local function AnimateBorderIn(BorderContainer: Frame, ContentBox: Frame, Gradie
 	return { TopRight, TopLeft, RightSide, LeftSide, BottomRight, BottomLeft }
 end
 
--- Reverse border animation: bottom retracts, sides retract up, top retracts to center
+--[[
+    reverses the border animation, retracting all segments back to center
+    (@yields)
+]]
 local function AnimateBorderOut(Segments: { Frame }, Gradients: { UIGradient }?)
 	local T = BORDER_THICKNESS
 	local TopRight, TopLeft, RightSide, LeftSide, BottomRight, BottomLeft =
@@ -192,7 +190,6 @@ local function AnimateBorderOut(Segments: { Frame }, Gradients: { UIGradient }?)
 	local EaseOut = Enum.EasingDirection.Out
 	local EaseIn = Enum.EasingDirection.In
 
-	-- Fire gradient hide tween for full border duration
 	if Gradients then
 		for _, G in Gradients do
 			TweenService:Create(G, TweenInfo.new(BORDER_SNAKE_DURATION, EaseStyle, EaseIn), {
@@ -201,7 +198,6 @@ local function AnimateBorderOut(Segments: { Frame }, Gradients: { UIGradient }?)
 		end
 	end
 
-	-- Phase 1: Bottom halves retract toward corners
 	local TweenBR = TweenService:Create(BottomRight, TweenInfo.new(SegDuration, EaseStyle, EaseIn), {
 		Size = UDim2.fromOffset(0, T),
 	})
@@ -212,7 +208,6 @@ local function AnimateBorderOut(Segments: { Frame }, Gradients: { UIGradient }?)
 	TweenBL:Play()
 	TweenBR.Completed:Wait()
 
-	-- Phase 2: Sides retract upward
 	local TweenR = TweenService:Create(RightSide, TweenInfo.new(SegDuration, EaseStyle, EaseOut), {
 		Size = UDim2.fromOffset(T, 0),
 	})
@@ -223,7 +218,6 @@ local function AnimateBorderOut(Segments: { Frame }, Gradients: { UIGradient }?)
 	TweenL:Play()
 	TweenR.Completed:Wait()
 
-	-- Phase 3: Top halves retract to center
 	local TweenTR = TweenService:Create(TopRight, TweenInfo.new(SegDuration, EaseStyle, EaseIn), {
 		Size = UDim2.fromOffset(0, T),
 	})
@@ -239,9 +233,21 @@ local function AnimateBorderOut(Segments: { Frame }, Gradients: { UIGradient }?)
 	end
 end
 
--- Show a single announcement
+--[[
+    shows a single announcement with animated border and slide-in/out
+    (@yields)
+]]
 local function ShowAnnouncement(Title: string, Subtitle: string?, Duration: number?, IsWarning: boolean?)
 	IsShowing = true
+
+	for _, Callback in OnShowCallbacks do
+		task.spawn(Callback)
+	end
+
+	local SoundObj = SoundService.UI:FindFirstChild(if IsWarning then "Warning" else "Announcement")
+	if SoundObj and SoundObj:IsA("Sound") then
+		LayeredSound.Play(SoundObj, 0.5)
+	end
 	local HoldTime = Duration or DISPLAY_DURATION
 	local BorderColor = if IsWarning then WARNING_COLOR else BORDER_COLOR
 	local Small = IsSmallScreen()
@@ -251,7 +257,6 @@ local function ShowAnnouncement(Title: string, Subtitle: string?, Duration: numb
 	local ActivePadH = if Small then AnnouncementConst.SMALL_PADDING_H else 20
 	local ActiveWidth = if Small then AnnouncementConst.SMALL_WIDTH else 0.35
 
-	-- Outer anchor — positions the whole unit at top center, off-screen initially
 	local Anchor = Instance.new("Frame")
 	Anchor.Name = "AnnouncementAnchor"
 	Anchor.AnchorPoint = Vector2.new(0.5, 0)
@@ -261,7 +266,6 @@ local function ShowAnnouncement(Title: string, Subtitle: string?, Duration: numb
 	Anchor.BackgroundTransparency = 1
 	Anchor.Parent = ScreenGui
 
-	-- Border container (pixel-sized after layout resolves to match ContentBox exactly)
 	local BorderContainer = Instance.new("Frame")
 	BorderContainer.Name = "BorderContainer"
 	BorderContainer.AnchorPoint = Vector2.new(0.5, 0)
@@ -271,7 +275,6 @@ local function ShowAnnouncement(Title: string, Subtitle: string?, Duration: numb
 	BorderContainer.ZIndex = 2
 	BorderContainer.Parent = Anchor
 
-	-- Content box (semi-transparent dark brown background)
 	local ContentBox = Instance.new("Frame")
 	ContentBox.Name = "ContentBox"
 	ContentBox.AnchorPoint = Vector2.new(0.5, 0)
@@ -315,7 +318,6 @@ local function ShowAnnouncement(Title: string, Subtitle: string?, Duration: numb
 	ListLayout.Padding = UDim.new(0, 6)
 	ListLayout.Parent = ContentBox
 
-	-- Title label
 	local TitleLabel = Instance.new("TextLabel")
 	TitleLabel.Name = "Title"
 	TitleLabel.Size = UDim2.new(1, 0, 0, 0)
@@ -344,7 +346,6 @@ local function ShowAnnouncement(Title: string, Subtitle: string?, Duration: numb
 	TitleGradient.Parent = TitleLabel
 	table.insert(Gradients, TitleGradient)
 
-	-- Subtitle label (only if provided)
 	if Subtitle and Subtitle ~= "" then
 		local SubtitleLabel = Instance.new("TextLabel")
 		SubtitleLabel.Name = "Subtitle"
@@ -376,17 +377,14 @@ local function ShowAnnouncement(Title: string, Subtitle: string?, Duration: numb
 		table.insert(Gradients, SubtitleGradient)
 	end
 
-	-- Slide in from top
 	local SlideIn = TweenService:Create(Anchor, TweenInfo.new(SLIDE_DURATION, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
 		Position = UDim2.new(0.5, 0, 0.04, 0),
 	})
 	SlideIn:Play()
 	SlideIn.Completed:Wait()
 
-	-- Animate border snaking around
 	local Segments = AnimateBorderIn(BorderContainer, ContentBox, Gradients, BorderColor)
 
-	-- Warning pulse: alternate border color between warning red and beige
 	local PulseThread: thread? = nil
 	if IsWarning then
 		PulseThread = task.spawn(function()
@@ -408,10 +406,8 @@ local function ShowAnnouncement(Title: string, Subtitle: string?, Duration: numb
 		end)
 	end
 
-	-- Hold
 	task.wait(HoldTime)
 
-	-- Stop pulsing and reset colors before out-animation
 	if PulseThread then
 		task.cancel(PulseThread)
 		for _, Segment in Segments do
@@ -425,32 +421,38 @@ local function ShowAnnouncement(Title: string, Subtitle: string?, Duration: numb
 		task.wait(0.15)
 	end
 
-	-- Animate border snaking out (reverse)
 	AnimateBorderOut(Segments, Gradients)
 
-	-- Slide out upward
 	local SlideOut = TweenService:Create(Anchor, TweenInfo.new(SLIDE_DURATION * 0.8, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
 		Position = UDim2.new(0.5, 0, -0.15, 0),
 	})
 	SlideOut:Play()
 	SlideOut.Completed:Wait()
 
-	-- Cleanup
 	Anchor:Destroy()
 
 	IsShowing = false
+
+	for _, Callback in OnHideCallbacks do
+		task.spawn(Callback)
+	end
 end
 
--- Process the queue sequentially
+--[[
+    drains the announcement queue one entry at a time
+    (@yields)
+]]
 local function ProcessQueue()
 	while #Queue > 0 do
 		local Entry = table.remove(Queue, 1)
 		ShowAnnouncement(Entry.Title, Entry.Subtitle, Entry.Duration, Entry.IsWarning)
-		task.wait(0.2) -- brief gap between queued announcements
+		task.wait(0.2)
 	end
 end
 
---- Queue an announcement to display
+--[[
+    adds an announcement to the queue
+]]
 function AnnouncementController.Announce(Title: string, Subtitle: string?, Duration: number?)
 	table.insert(Queue, { Title = Title, Subtitle = Subtitle, Duration = Duration })
 	if not IsShowing then
@@ -458,7 +460,9 @@ function AnnouncementController.Announce(Title: string, Subtitle: string?, Durat
 	end
 end
 
---- Queue a warning announcement with pulsing red/beige border
+--[[
+    adds a warning announcement to the queue with a pulsing border
+]]
 function AnnouncementController.Warn(Title: string, Subtitle: string?, Duration: number?)
 	table.insert(Queue, { Title = Title, Subtitle = Subtitle, Duration = Duration, IsWarning = true })
 	if not IsShowing then
@@ -466,7 +470,6 @@ function AnnouncementController.Warn(Title: string, Subtitle: string?, Duration:
 	end
 end
 
--- Listen for server announcements
 AnnouncementNetwork.packets.Show.listen(function(Data: { Title: string, Subtitle: string?, Duration: number?, IsWarning: boolean? })
 	if Data.IsWarning then
 		AnnouncementController.Warn(Data.Title, Data.Subtitle, Data.Duration)
@@ -475,11 +478,25 @@ AnnouncementNetwork.packets.Show.listen(function(Data: { Title: string, Subtitle
 	end
 end)
 
-do
-    task.wait(3)
-    AnnouncementController.Announce("Welcome aboard!", "Sit back, relax, and enjoy the ride.")
-    task.wait(1)
-    AnnouncementController.Warn("The train is out of coal", "Exit the train and search the area for coal to get the train running again!")
+--[[
+    returns whether an announcement is currently visible
+]]
+function AnnouncementController.IsShowing(): boolean
+	return IsShowing
+end
+
+--[[
+    registers a callback fired when an announcement begins showing
+]]
+function AnnouncementController.OnShow(Callback: () -> ())
+	table.insert(OnShowCallbacks, Callback)
+end
+
+--[[
+    registers a callback fired when an announcement finishes hiding
+]]
+function AnnouncementController.OnHide(Callback: () -> ())
+	table.insert(OnHideCallbacks, Callback)
 end
 
 return AnnouncementController

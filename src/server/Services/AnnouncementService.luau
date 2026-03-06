@@ -2,7 +2,9 @@ local AnnouncementNetwork = require(game:GetService("ReplicatedStorage").Shared.
 
 local AnnouncementService = {}
 
---- Broadcast an announcement to all players
+--[[
+    broadcasts an announcement to all players
+]]
 function AnnouncementService.AnnounceAll(Title: string, Subtitle: string?, Duration: number?, IsWarning: boolean?)
 	AnnouncementNetwork.packets.Show.sendToAll({
 		Title = Title,
@@ -12,7 +14,9 @@ function AnnouncementService.AnnounceAll(Title: string, Subtitle: string?, Durat
 	})
 end
 
---- Send an announcement to a specific player
+--[[
+    sends an announcement to a specific player
+]]
 function AnnouncementService.AnnounceTo(TargetPlayer: Player, Title: string, Subtitle: string?, Duration: number?, IsWarning: boolean?)
 	AnnouncementNetwork.packets.Show.sendTo({
 		Title = Title,

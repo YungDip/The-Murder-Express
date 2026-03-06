@@ -2,8 +2,6 @@ local FootstepNetwork = require(game:GetService("ReplicatedStorage").Shared.Netw
 
 local FootstepService = {}
 
--- Listen for footstep packets from clients and broadcast to all other clients
-
 do
 	FootstepNetwork.packets.FootstepToServer.listen(function(MaterialIndex: number, SenderPlayer: Player)
 		FootstepNetwork.packets.FootstepToClient.sendToAllExcept({

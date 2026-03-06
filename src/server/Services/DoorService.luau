@@ -37,7 +37,6 @@ local function IsAnyPlayerNear(Door: Model): boolean
 	return false
 end
 
--- Send current door states to a newly joined player
 local function SyncDoorsToPlayer(TargetPlayer: Player)
 	for Door, IsOpen in OpenDoors do
 		if IsOpen and Door.Parent then
@@ -50,11 +49,9 @@ local function SyncDoorsToPlayer(TargetPlayer: Player)
 end
 
 Players.PlayerAdded:Connect(function(TargetPlayer: Player)
-	-- Small delay so the client has time to set up listeners
 	task.delay(2, SyncDoorsToPlayer, TargetPlayer)
 end)
 
--- Main proximity check loop
 task.spawn(function()
 	while true do
 		task.wait(DoorConst.CHECK_INTERVAL)

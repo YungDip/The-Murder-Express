@@ -11,7 +11,6 @@ local FootConst = Constants.Footstep
 
 local FootstepController = {}
 
--- Cache sound templates keyed by material name
 local SoundTemplates: {[string]: Sound} = {}
 for _, MaterialName in FootConst.MATERIALS do
 	local Sound = StepFolder:FindFirstChild(MaterialName)
@@ -20,7 +19,6 @@ for _, MaterialName in FootConst.MATERIALS do
 	end
 end
 
--- Map material name -> uint8 index for networking
 local MaterialToIndex: {[string]: number} = {}
 local IndexToMaterial: {[number]: string} = {}
 for Index, MaterialName in FootConst.MATERIALS do
@@ -28,11 +26,8 @@ for Index, MaterialName in FootConst.MATERIALS do
 	IndexToMaterial[Index] = MaterialName
 end
 
--- Raycast setup
 local RayParams = RaycastParams.new()
 RayParams.FilterType = Enum.RaycastFilterType.Exclude
-
--- Helpers
 
 local function GetMaterialFromRaycast(Character: Model): string
 	local Root = Character:FindFirstChild("HumanoidRootPart") :: BasePart?
@@ -76,13 +71,10 @@ local function GetHorizontalSpeed(Character: Model): number
 	return Vector3.new(Velocity.X, 0, Velocity.Z).Magnitude
 end
 
--- Disable default Roblox footstep sound for a character
-
 local function DisableDefaultFootsteps(Character: Model)
 	local Humanoid = Character:FindFirstChildOfClass("Humanoid")
 	if not Humanoid then return end
 
-	-- The default Running sound is parented to HumanoidRootPart
 	local Root = Character:WaitForChild("HumanoidRootPart", 5)
 	if not Root then return end
 
@@ -92,7 +84,6 @@ local function DisableDefaultFootsteps(Character: Model)
 		Running.PlayOnRemove = false
 	end
 
-	-- Also catch it if it gets added later
 	Root.ChildAdded:Connect(function(Child)
 		if Child.Name == "Running" and Child:IsA("Sound") then
 			Child.Volume = 0
@@ -100,8 +91,6 @@ local function DisableDefaultFootsteps(Character: Model)
 		end
 	end)
 end
-
--- Local stepping logic (this client's character)
 
 local StepAccumulator = 0
 
@@ -118,7 +107,6 @@ local function UpdateLocalStepping(DeltaTime: number)
 		return
 	end
 
-	-- Floor check: only step if on the ground
 	if Humanoid.FloorMaterial == Enum.Material.Air then
 		StepAccumulator = 0
 		return
@@ -133,21 +121,16 @@ local function UpdateLocalStepping(DeltaTime: number)
 		local MaterialName = GetMaterialFromRaycast(Character)
 		local MaterialIndex = MaterialToIndex[MaterialName] or 1
 
-		-- Send to server for global broadcast
 		FootstepNetwork.packets.FootstepToServer.send(MaterialIndex)
 
-		-- Play locally immediately for responsiveness
 		PlayStepSound(Character, MaterialName)
 	end
 end
-
--- Listen for other players' footsteps broadcast from server
 
 local function OnFootstepReceived(Data: {Player: Instance, Material: number})
 	local SteppingPlayer = Data.Player
 	if not SteppingPlayer or not SteppingPlayer:IsA("Player") then return end
 
-	-- Don't double-play our own footsteps (we already play locally)
 	if SteppingPlayer == Player then return end
 
 	local Character = SteppingPlayer.Character
@@ -157,10 +140,7 @@ local function OnFootstepReceived(Data: {Player: Instance, Material: number})
 	PlayStepSound(Character, MaterialName)
 end
 
--- Disable footsteps for all characters
-
 local function OnCharacterAdded(Character: Model)
-	-- Wait for the character to fully load, then disable default sounds
 	task.spawn(function()
 		Character:WaitForChild("Humanoid", 5)
 		DisableDefaultFootsteps(Character)
@@ -174,19 +154,14 @@ local function SetupPlayer(TargetPlayer: Player)
 	TargetPlayer.CharacterAdded:Connect(OnCharacterAdded)
 end
 
--- Boot
-
 do
-	-- Disable default footsteps for all players
 	for _, TargetPlayer in Players:GetPlayers() do
 		SetupPlayer(TargetPlayer)
 	end
 	Players.PlayerAdded:Connect(SetupPlayer)
 
-	-- Listen for remote footstep broadcasts
 	FootstepNetwork.packets.FootstepToClient.listen(OnFootstepReceived)
 
-	-- Run stepping detection every frame
 	RunService.PreSimulation:Connect(UpdateLocalStepping)
 end
 

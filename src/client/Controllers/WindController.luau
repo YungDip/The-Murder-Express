@@ -7,22 +7,21 @@ local ScrollSpeedState = require(script.Parent.ScrollSpeedState)
 
 local WindController = {}
 
--- State
-
 local IsOutdoor = false
-
--- Zone transitions
 
 local function OnZoneChanged(Zone: ZoneCheck.Zone)
 	IsOutdoor = Zone == "Outside" or Zone == "Roof"
 end
 
--- Boot
-
 OnZoneChanged(ZoneCheck.GetState())
 ZoneCheck.OnChanged(OnZoneChanged)
 
 RunService.PreRender:Connect(function()
+	if not ScrollSpeedState.Active then
+		workspace.GlobalWind = Vector3.zero
+		return
+	end
+
 	local SpeedRatio = ScrollSpeedState.SpeedRatio
 
 	if IsOutdoor then
