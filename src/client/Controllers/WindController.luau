@@ -22,8 +22,6 @@ end
 OnZoneChanged(ZoneCheck.GetState())
 ZoneCheck.OnChanged(OnZoneChanged)
 
-local LastWindDebugTime = 0
-
 RunService.PreRender:Connect(function()
 	local SpeedRatio = ScrollSpeedState.SpeedRatio
 
@@ -31,12 +29,6 @@ RunService.PreRender:Connect(function()
 		workspace.GlobalWind = Constants.Wind.GLOBAL_WIND * SpeedRatio
 	else
 		workspace.GlobalWind = Vector3.zero
-	end
-
-	if os.clock() - LastWindDebugTime > 1 then
-		LastWindDebugTime = os.clock()
-		print(string.format("[Wind] SpeedRatio=%.3f IsOutdoor=%s GlobalWind=%s",
-			SpeedRatio, tostring(IsOutdoor), tostring(workspace.GlobalWind)))
 	end
 end)
 

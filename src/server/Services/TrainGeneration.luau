@@ -1,5 +1,6 @@
 local TrainGeneration = {}
 local ServerStorage = game:GetService("ServerStorage")
+local Players = game:GetService("Players")
 
 TrainGeneration.ModelPool = ServerStorage.CarModels:GetChildren()
 
@@ -10,6 +11,7 @@ local CONNECTOR_NEIGHBORS = { Connector = true, CabinCar = true }
 local FLATCAR_FOLLOWERS = { CabinCar = true, RegularCar = true }
 local MAX_SUCCESSION = 2
 local FLATCAR_MAX_SUCCESSION = 4
+local ROOMS_PER_CABIN = 5
 
 -- Rules are validator functions: (Sequence, Position, CarType, Length) -> boolean
 -- Add new entries to this table to extend generation constraints
@@ -105,15 +107,43 @@ local function AlignCarToEnd(Car: Model, PreviousEnd: BasePart)
 	Car:PivotTo(PreviousEnd.CFrame * Offset:Inverse())
 end
 
-function TrainGeneration:Generate(Length: number, Seed: number)
+function TrainGeneration:Generate(Length: number, Seed: number, PlayerCount: number)
 	ClearGeneratedCars()
 
+	local RequiredCabinCars = math.ceil(PlayerCount / ROOMS_PER_CABIN)
 	local Rng = Random.new(Seed)
 	local Sequence: {string} = {}
 	local TypeCounts: {[string]: number} = {}
 
 	for Position = 1, Length do
 		local ValidTypes = GetValidTypes(self.Rules, Sequence, Position, Length)
+
+		-- Enforce CabinCar quota based on player count
+		local CabinCount = TypeCounts["CabinCar"] or 0
+		local CabinDeficit = RequiredCabinCars - CabinCount
+		local RemainingPositions = Length - Position + 1
+
+		if CabinCount >= RequiredCabinCars then
+			local Filtered = {}
+			for _, Type in ValidTypes do
+				if Type ~= "CabinCar" then
+					table.insert(Filtered, Type)
+				end
+			end
+			if #Filtered > 0 then
+				ValidTypes = Filtered
+			end
+		elseif CabinDeficit >= RemainingPositions then
+			local Filtered = {}
+			for _, Type in ValidTypes do
+				if Type == "CabinCar" then
+					table.insert(Filtered, Type)
+				end
+			end
+			if #Filtered > 0 then
+				ValidTypes = Filtered
+			end
+		end
 
 		-- Prefer car types we haven't placed yet so every type appears at least once
 		local Needed = {}
@@ -155,7 +185,10 @@ function TrainGeneration:Generate(Length: number, Seed: number)
 end
 
 do
-	TrainGeneration:Generate(10, os.time())
+	local PlayerCount = math.max(#Players:GetPlayers(), 1)
+	local Seed = os.time()
+	workspace:SetAttribute("TrainSeed", Seed)
+	TrainGeneration:Generate(15, Seed, PlayerCount)
 end
 
 return TrainGeneration

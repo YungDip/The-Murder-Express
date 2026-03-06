@@ -125,4 +125,30 @@ Constants.DeathVelocity = {
 	DURATION = 4,
 }
 
+Constants.Announcement = {
+	TEXT_COLOR = Color3.fromRGB(234, 224, 152),
+	BG_COLOR = Color3.fromRGB(40, 32, 24),
+	BORDER_COLOR = Color3.fromRGB(234, 224, 152),
+	FONT = "rbxasset://fonts/families/HighwayGothic.json",
+	TITLE_SIZE = 35,
+	SUBTITLE_SIZE = 26,
+	DISPLAY_DURATION = 4,
+	BORDER_THICKNESS = 2,
+	SLIDE_DURATION = 0.5,
+	BORDER_SNAKE_DURATION = 0.9,
+	HOLD_AFTER_BORDER = 0.3,
+	WARNING_COLOR = Color3.fromRGB(200, 50, 40),
+	WARNING_PULSE_SPEED = 1.2,
+
+	-- Small screen overrides (viewport height < 1080)
+	SMALL_TITLE_SIZE = 20,
+	SMALL_SUBTITLE_SIZE = 15,
+	SMALL_PADDING_V = 8,
+	SMALL_PADDING_H = 12,
+	SMALL_WIDTH = 0.5,
+	SMALL_THRESHOLD = 1080,
+}
+
+Constants.VERSION = "0.1.0"
+
 return Constants

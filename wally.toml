@@ -6,3 +6,6 @@ realm = "shared"
 
 [dependencies]
 bytenet-max = "elitriare/bytenet-max@0.2.5"
+
+[server-dependencies]
+cmdr = "evaera/cmdr@1.12.0"

@@ -210,18 +210,6 @@ do
 				end
 				WheelSound.PlaybackSpeed = WheelPlayback
 			end
-
-			-- Debug
-			if os.clock() - LastWheelDebugTime > 1 then
-				LastWheelDebugTime = os.clock()
-				local First = WheelSounds[1]
-				if First then
-					print(string.format(
-						"[Wheels] SpeedRatio=%.3f ZoneVol=%.3f TargetVol=%.3f ActualVol=%.3f Playback=%.3f Playing=%s Count=%d",
-						SpeedRatio, WheelZoneVolume, WheelTargetVolume, First.Volume, First.PlaybackSpeed, tostring(First.Playing), #WheelSounds
-					))
-				end
-			end
 		end
 	end)
 end
