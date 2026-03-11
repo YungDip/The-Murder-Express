@@ -66,4 +66,13 @@ function ScrollCompute.DecelerationTime(CurrentSpeed: number, TargetSpeed: numbe
 	return math.abs(CurrentSpeed - TargetSpeed) / Deceleration
 end
 
+--[[
+    snaps to the nearest tile-edge grid point >= AtDistance.
+    tile edges form a fixed world-space grid with spacing TileWidth.
+]]
+function ScrollCompute.SnapToTileEdge(AtDistance: number, TileWidth: number, CenterPool: number): number
+	local GridPhase = TileWidth / 2 - (CenterPool - 1) * TileWidth
+	return math.ceil((AtDistance - GridPhase) / TileWidth) * TileWidth + GridPhase
+end
+
 return ScrollCompute

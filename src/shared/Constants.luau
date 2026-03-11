@@ -49,6 +49,9 @@ Constants.WorldScroll = {
 	-- How far ahead (studs) to spawn the tunnel's leading edge
 	TUNNEL_BUFFER = 600,
 
+	-- Number of tunnel segments to stack for scene transitions
+	SCENE_TUNNEL_SEGMENTS = 3,
+
 	-- Lanes that always scroll regardless of scenery transitions
 	CONSTANT_LANES = {
 		{ ModelName = "Tracks", Direction = 1, PoolSize = 3 },
@@ -58,8 +61,12 @@ Constants.WorldScroll = {
 	-- Default deceleration (studs/s²) used when stopping at a scene
 	STOP_DECELERATION = 25,
 
-	-- How many repeats of the scenery set to place beyond the scene model as a visual buffer
-	SCENE_TAIL_REPEATS = 3,
+	-- Extra distance (studs) beyond the physics braking distance to place the scene,
+	-- ensuring it spawns well ahead of all visible looping tiles
+	SCENE_APPROACH_BUFFER = 800,
+
+	-- Duration (seconds) of the braking phase when stopping at a scene
+	SCENE_BRAKE_DURATION = 8,
 }
 
 Constants.Wind = {
@@ -151,6 +158,8 @@ Constants.Announcement = {
 }
 
 Constants.VERSION = "0.1.0"
+
+Constants.SOLO_TEST_ENABLED = true
 
 Constants.Round = {
 	MIN_PLAYERS = 3,

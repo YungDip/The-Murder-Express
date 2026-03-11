@@ -19,6 +19,7 @@ type Lane = {
 	CycleLength: number,
 	Active: boolean,
 	DrainStartDistance: number?,
+	ModelName: string,
 }
 
 type OneShotTile = {
@@ -27,6 +28,7 @@ type OneShotTile = {
 	Direction: number,
 	SpawnDistance: number,
 	TileWidth: number,
+	Rotation: CFrame,
 }
 
 local ZoneModels: Folder = nil :: any
@@ -52,11 +54,22 @@ local TunnelData: {
 	OldSceneryHidden: boolean,
 }? = nil
 
-local SceneInstance: (Model | BasePart)? = nil
-local SceneStopDistance: number = 0
-local SceneTailInstances: {Model | BasePart} = {}
+local SceneTunnelData: {
+	DrainLanes: {string},
+	DrainAtDistance: number,
+	DrainsApplied: boolean,
+	RestoreLanes: {string},
+	RestoreAtDistance: number,
+	RestoresApplied: boolean,
+}? = nil
 
 local Wheels: {{Mesh: MeshPart, Origin: CFrame, Radius: number}} = {}
+
+-- World-distance range [Left, Right] of the scene exclusion zone (nil when inactive)
+local SceneZone: {Left: number, Right: number}? = nil
+-- Lane model names that are replaced by a scene one-shot and should be hidden in the zone
+local SceneReplacedLanes: {[string]: boolean} = {}
+local HiddenDecorations: {[BasePart]: number} = {}
 
 local Initialized = false
 
@@ -111,6 +124,7 @@ local function CreateLaneFromTemplate(Config: Types.LaneConfig): Lane
 		CycleLength = PoolSize * TileWidth,
 		Active = true,
 		DrainStartDistance = nil,
+		ModelName = Config.ModelName,
 	}
 end
 
@@ -124,23 +138,153 @@ local function DestroyLane(LaneData: Lane)
 	table.clear(LaneData.Pool)
 end
 
-local function UpdateLaneLooping(LaneData: Lane, ScrollOffset: number)
+--[[
+	Computes the camera-relative offset of a tile at a given scroll distance.
+]]
+local function GetTileOffset(LaneData: Lane, Index: number, ScrollOffset: number): number
+	local CycleLen = LaneData.CycleLength
+	local TileWidth = LaneData.TileWidth
+	local HalfSpan = (LaneData.CenterPool - 1) * TileWidth
+	local RawPos = (Index - 1) * TileWidth - (ScrollOffset % CycleLen)
+	local WrappedPos = RawPos % CycleLen
+	return WrappedPos - HalfSpan
+end
+
+--[[
+	Positions all tiles in a lane. If Zone is provided, tiles that would overlap
+	the world-distance range [Zone.Left, Zone.Right] are pushed beyond the zone's
+	right edge so that looping tiles seamlessly continue after a one-shot scene.
+]]
+local function UpdateLaneLooping(LaneData: Lane, ScrollOffset: number, Zone: {Left: number, Right: number}?)
 	if not LaneData.Active then
 		return
 	end
 
 	local CycleLen = LaneData.CycleLength
 	local TileWidth = LaneData.TileWidth
+	local TileHalf = TileWidth / 2
 	local Direction = LaneData.Direction
 	local Anchor = LaneData.AnchorCFrame
 	local HalfSpan = (LaneData.CenterPool - 1) * TileWidth
 
-	for Index, Tile in LaneData.Pool do
+	if not Zone then
+		for Index, Tile in LaneData.Pool do
+			local RawPos = (Index - 1) * TileWidth - (ScrollOffset % CycleLen)
+			local WrappedPos = RawPos % CycleLen
+			local FinalOffset = WrappedPos - HalfSpan
+			Tile:PivotTo(CFrame.new(Direction * FinalOffset, 0, 0) * Anchor)
+		end
+		return
+	end
+
+	-- Zone-aware placement: compute normal offsets, then push any tile that
+	-- overlaps the zone to stack beyond the zone's right edge.
+	local ZoneRightLocal = Zone.Right - ScrollOffset
+	local ZoneLeftLocal = Zone.Left - ScrollOffset
+
+	-- First pass: compute normal offsets for all tiles
+	local Offsets = table.create(LaneData.PoolSize)
+	for Index = 1, LaneData.PoolSize do
 		local RawPos = (Index - 1) * TileWidth - (ScrollOffset % CycleLen)
 		local WrappedPos = RawPos % CycleLen
-		local FinalOffset = WrappedPos - HalfSpan
+		Offsets[Index] = WrappedPos - HalfSpan
+	end
 
-		Tile:PivotTo(Anchor * CFrame.new(Direction * FinalOffset, 0, 0))
+	-- Second pass: push overlapping tiles beyond the zone right edge
+	-- Sort pushed tiles so they stack neatly after the zone
+	local NextPushOffset = ZoneRightLocal + TileHalf
+	-- Collect indices of tiles that need pushing, sorted by their natural offset
+	local PushIndices = {}
+	for Index = 1, LaneData.PoolSize do
+		local FinalOffset = Offsets[Index]
+		local TileLeft = FinalOffset - TileHalf
+		local TileRight = FinalOffset + TileHalf
+		if TileRight > ZoneLeftLocal and TileLeft < ZoneRightLocal then
+			table.insert(PushIndices, Index)
+		end
+	end
+	-- Sort by natural offset so pushed tiles maintain order
+	table.sort(PushIndices, function(A, B)
+		return Offsets[A] < Offsets[B]
+	end)
+	for _, Index in PushIndices do
+		Offsets[Index] = NextPushOffset
+		NextPushOffset = NextPushOffset + TileWidth
+	end
+
+	for Index, Tile in LaneData.Pool do
+		Tile:PivotTo(CFrame.new(Direction * Offsets[Index], 0, 0) * Anchor)
+	end
+end
+
+--[[
+	Finds the right (forward) edge of the most-forward tile in a lane at StopDistance.
+	Returns the world distance of that edge.
+]]
+local function GetLaneForwardEdge(LaneData: Lane, AtDistance: number): number
+	local TileHalf = LaneData.TileWidth / 2
+	local BestOffset = -math.huge
+	for Index = 1, LaneData.PoolSize do
+		local Offset = GetTileOffset(LaneData, Index, AtDistance)
+		if Offset > BestOffset then
+			BestOffset = Offset
+		end
+	end
+	return AtDistance + BestOffset + TileHalf
+end
+
+local function StripBaseplateDecorations(Tile: Model | BasePart)
+	local RootY = Tile:GetPivot().Position.Y
+	for _, Descendant in Tile:QueryDescendants("BasePart") do
+		if Descendant.Position.Y > RootY + 1 and HiddenDecorations[Descendant] == nil then
+			HiddenDecorations[Descendant] = Descendant.Transparency
+			Descendant.Transparency = 1
+		end
+	end
+end
+
+local function RestoreAllDecorations()
+	for Part, OriginalTransparency in HiddenDecorations do
+		if Part and Part.Parent then
+			Part.Transparency = OriginalTransparency
+		end
+	end
+	table.clear(HiddenDecorations)
+end
+
+local function RestoreTileDecorations(Tile: Model | BasePart)
+	for _, Descendant in Tile:QueryDescendants("BasePart") do
+		local Cached = HiddenDecorations[Descendant]
+		if Cached ~= nil then
+			Descendant.Transparency = Cached
+			HiddenDecorations[Descendant] = nil
+		end
+	end
+end
+
+--[[
+	For each Baseplate tile, checks overlap with the scene zone.
+	Tiles overlapping have their decorations hidden.
+	Tiles that are well behind the player (scrolled past) get decorations restored.
+	Tiles ahead that are outside the zone keep their current state.
+]]
+local function UpdateBaseplateExclusions(LaneData: Lane, ScrollOffset: number, Zone: {Left: number, Right: number})
+	if not LaneData.Active then
+		return
+	end
+
+	local TileHalf = LaneData.TileWidth / 2
+
+	for Index, Tile in LaneData.Pool do
+		local FinalOffset = GetTileOffset(LaneData, Index, ScrollOffset)
+		local TileWorldLeft = ScrollOffset + FinalOffset - TileHalf
+		local TileWorldRight = ScrollOffset + FinalOffset + TileHalf
+
+		if TileWorldRight > Zone.Left and TileWorldLeft < Zone.Right then
+			StripBaseplateDecorations(Tile)
+		elseif TileWorldRight < ScrollOffset - LaneData.TileWidth then
+			RestoreTileDecorations(Tile)
+		end
 	end
 end
 
@@ -169,7 +313,7 @@ local function _UpdateLaneDraining(LaneData: Lane, CurrentDistance: number)
 
 		if math.abs(FinalOffset) < HalfSpan + TileWidth * 3 then
 			AllOffscreen = false
-			Tile:PivotTo(Anchor * CFrame.new(Direction * FinalOffset, 0, 0))
+			Tile:PivotTo(CFrame.new(Direction * FinalOffset, 0, 0) * Anchor)
 		else
 			Tile:PivotTo(CFrame.new(0, -1000, 0))
 		end
@@ -180,13 +324,14 @@ local function _UpdateLaneDraining(LaneData: Lane, CurrentDistance: number)
 	end
 end
 
-local function SpawnOneShotTile(ModelName: string, SpawnDistance: number, Direction: number, AnchorCFrame: CFrame): OneShotTile
+local function SpawnOneShotTile(ModelName: string, SpawnDistance: number, Direction: number, AnchorCFrame: CFrame, Rotation: CFrame?): OneShotTile
 	local Template = GetTemplate(ModelName)
 	local Clone = Template:Clone()
 	Clone.Name = ModelName .. "_OneShot"
 	Clone.Parent = workspace
 
-	local TileWidth = GetOneShotScrollWidth(Template)
+	local Rot = Rotation or CFrame.identity
+	local TileWidth = if Rotation then GetOneShotScrollWidth(Template) else GetBoundsX(Template)
 
 	local Tile: OneShotTile = {
 		Instance = Clone,
@@ -194,6 +339,7 @@ local function SpawnOneShotTile(ModelName: string, SpawnDistance: number, Direct
 		Direction = Direction,
 		SpawnDistance = SpawnDistance,
 		TileWidth = TileWidth,
+		Rotation = Rot,
 	}
 	table.insert(OneShotTiles, Tile)
 	return Tile
@@ -201,7 +347,7 @@ end
 
 local function UpdateOneShotTile(Tile: OneShotTile, CurrentDistance: number)
 	local Offset = Tile.SpawnDistance - CurrentDistance
-	Tile.Instance:PivotTo(Tile.AnchorCFrame * CFrame.new(Tile.Direction * Offset, 0, 0) * CFrame.Angles(0, math.rad(-90), 0))
+	Tile.Instance:PivotTo(CFrame.new(Tile.Direction * Offset, 0, 0) * Tile.AnchorCFrame * Tile.Rotation)
 end
 
 local function CleanupOneShotTile(Tile: OneShotTile)
@@ -229,20 +375,6 @@ local function SpawnSceneryLanes(SceneryNames: {string})
 	end
 
 	_ActiveSceneryNames = SceneryNames
-end
-
-local function CleanupScene()
-	if SceneInstance and SceneInstance.Parent then
-		SceneInstance:Destroy()
-	end
-	SceneInstance = nil
-
-	for _, Inst in SceneTailInstances do
-		if Inst and Inst.Parent then
-			Inst:Destroy()
-		end
-	end
-	table.clear(SceneTailInstances)
 end
 
 --[[
@@ -358,39 +490,192 @@ WorldScrollNetwork.packets.TunnelTransition.listen(function(Data)
 		Data.TunnelModel,
 		TunnelSpawnDistance,
 		RefDirection,
-		RefAnchor
+		RefAnchor,
+		CFrame.Angles(0, math.rad(-90), 0)
 	)
 end)
+
+--[[
+	Maps a scene model name to the looping lane it replaces.
+	e.g. "LeftStop" replaces "LeftMountains"
+]]
+local SceneModelToLane: {[string]: string} = {
+	LeftStop = "LeftMountains",
+}
 
 WorldScrollNetwork.packets.SceneStop.listen(function(Data)
 	ServerScrollState = DecodeFlatScrollState(Data)
 	CurrentPhase = "SceneStopping"
-	SceneStopDistance = Data.StopDistance
 
-	if Data.SceneModel ~= "" then
-		local Template = GetTemplate(Data.SceneModel)
-		local Clone = Template:Clone()
-		Clone.Name = Data.SceneModel .. "_Scene"
-		Clone.Parent = workspace
-		SceneInstance = Clone
+	local ActiveSet = {}
+	for _, Name in _ActiveSceneryNames do
+		ActiveSet[Name] = true
 	end
 
-	for _, Name in Data.TailScenery do
-		local Template = GetTemplate(Name)
-		local Clone = Template:Clone()
-		Clone.Name = Name .. "_Tail"
-		Clone.Parent = workspace
-		table.insert(SceneTailInstances, Clone)
+	SceneZone = nil
+	table.clear(SceneReplacedLanes)
+	RestoreAllDecorations()
+
+	-- Collect non-active scene models and find the lanes they replace
+	local OneShotsToSpawn: {{ModelName: string, ReplacesLane: string?}} = {}
+	for _, ModelName in Data.SceneModels do
+		if not ActiveSet[ModelName] then
+			local ReplacesLane = SceneModelToLane[ModelName]
+			table.insert(OneShotsToSpawn, {ModelName = ModelName, ReplacesLane = ReplacesLane})
+			if ReplacesLane then
+				SceneReplacedLanes[ReplacesLane] = true
+			end
+		end
 	end
+
+	-- For each one-shot, snap its position to the forward edge of the lane it replaces
+	-- using the current scroll distance so it appears right at the first available slot
+	local ZoneLeft = math.huge
+	local ZoneRight = -math.huge
+
+	for _, Info in OneShotsToSpawn do
+		local Template = GetTemplate(Info.ModelName)
+		local OneShotWidth = GetBoundsX(Template)
+		local OneShotHalf = OneShotWidth / 2
+
+		local SpawnDist: number
+
+		if Info.ReplacesLane then
+			-- Find the lane this model replaces and snap to its forward tile edge
+			local TargetLane: Lane? = nil
+			for _, LaneData in SceneryLanes do
+				if LaneData.ModelName == Info.ReplacesLane and LaneData.Active then
+					TargetLane = LaneData
+					break
+				end
+			end
+
+			if TargetLane then
+				local SnapEdge = ScrollCompute.SnapToTileEdge(Data.ScrollBaseDistance, TargetLane.TileWidth, TargetLane.CenterPool)
+				SpawnDist = SnapEdge + OneShotHalf
+			else
+				SpawnDist = Data.StopDistance
+			end
+		else
+			SpawnDist = Data.StopDistance
+		end
+
+		SpawnOneShotTile(Info.ModelName, SpawnDist, 1, Template:GetPivot())
+
+		-- Expand the exclusion zone to cover this one-shot
+		local Left = SpawnDist - OneShotHalf
+		local Right = SpawnDist + OneShotHalf
+		if Left < ZoneLeft then ZoneLeft = Left end
+		if Right > ZoneRight then ZoneRight = Right end
+	end
+
+	if ZoneLeft < ZoneRight then
+		SceneZone = {Left = ZoneLeft, Right = ZoneRight}
+	end
+end)
+
+WorldScrollNetwork.packets.SceneTunnelStop.listen(function(Data)
+	ServerScrollState = DecodeFlatScrollState(Data)
+	CurrentPhase = "SceneStopping"
+
+	local ActiveSet = {}
+	for _, Name in _ActiveSceneryNames do
+		ActiveSet[Name] = true
+	end
+
+	SceneZone = nil
+	table.clear(SceneReplacedLanes)
+	RestoreAllDecorations()
+
+	-- Lanes drained by tunnels should loop normally until the drain point
+	local TunnelDrainSet: {[string]: boolean} = {}
+	for _, LaneName in Data.DrainLanes do
+		TunnelDrainSet[LaneName] = true
+	end
+
+	local OneShotsToSpawn: {{ModelName: string, ReplacesLane: string?}} = {}
+	for _, ModelName in Data.SceneModels do
+		if not ActiveSet[ModelName] then
+			local ReplacesLane = SceneModelToLane[ModelName]
+			table.insert(OneShotsToSpawn, {ModelName = ModelName, ReplacesLane = ReplacesLane})
+			if ReplacesLane and not TunnelDrainSet[ReplacesLane] then
+				SceneReplacedLanes[ReplacesLane] = true
+			end
+		end
+	end
+
+	local ZoneLeft = math.huge
+	local ZoneRight = -math.huge
+
+	for _, Info in OneShotsToSpawn do
+		local Template = GetTemplate(Info.ModelName)
+		local OneShotWidth = GetBoundsX(Template)
+		local OneShotHalf = OneShotWidth / 2
+		local SpawnDist = Data.StopDistance
+
+		SpawnOneShotTile(Info.ModelName, SpawnDist, 1, Template:GetPivot())
+
+		local Left = SpawnDist - OneShotHalf
+		local Right = SpawnDist + OneShotHalf
+		if Left < ZoneLeft then ZoneLeft = Left end
+		if Right > ZoneRight then ZoneRight = Right end
+	end
+
+	if ZoneLeft < ZoneRight then
+		SceneZone = {Left = ZoneLeft, Right = ZoneRight}
+	end
+
+	local RefAnchor = if #ConstantLanes > 0
+		then ConstantLanes[1].AnchorCFrame
+		else CFrame.new()
+	local RefDirection = if #ConstantLanes > 0
+		then ConstantLanes[1].Direction
+		else 1
+	local TunnelRotation = CFrame.Angles(0, math.rad(-90), 0)
+
+	for _, Center in Data.ApproachTunnelCenters do
+		SpawnOneShotTile(Data.TunnelModel, Center, RefDirection, RefAnchor, TunnelRotation)
+	end
+	for _, Center in Data.DepartureTunnelCenters do
+		SpawnOneShotTile(Data.TunnelModel, Center, RefDirection, RefAnchor, TunnelRotation)
+	end
+
+	SceneTunnelData = {
+		DrainLanes = Data.DrainLanes,
+		DrainAtDistance = Data.DrainAtDistance,
+		DrainsApplied = false,
+		RestoreLanes = Data.RestoreLanes,
+		RestoreAtDistance = Data.RestoreAtDistance,
+		RestoresApplied = false,
+	}
 end)
 
 WorldScrollNetwork.packets.SceneResume.listen(function(Data)
 	ServerScrollState = DecodeFlatScrollState(Data)
 	CurrentPhase = "SceneResuming"
 
-	CleanupScene()
+	local NewScenery = Data.TransitionScenery
 
-	SpawnSceneryLanes(Data.TransitionScenery)
+	if SceneTunnelData then
+		_ActiveSceneryNames = NewScenery
+		return
+	end
+
+	local Changed = #NewScenery ~= #_ActiveSceneryNames
+	if not Changed then
+		for Index, Name in NewScenery do
+			if _ActiveSceneryNames[Index] ~= Name then
+				Changed = true
+				break
+			end
+		end
+	end
+
+	if Changed then
+		SpawnSceneryLanes(NewScenery)
+	else
+		_ActiveSceneryNames = NewScenery
+	end
 end)
 
 do
@@ -461,13 +746,49 @@ do
 			ScrollSpeedState.Transition = nil
 		end
 
+		local ActiveZone = if SceneZone and (CurrentPhase == "SceneStopping" or CurrentPhase == "SceneStopped" or CurrentPhase == "SceneResuming") then SceneZone else nil
+
 		for _, LaneData in ConstantLanes do
 			UpdateLaneLooping(LaneData, Distance)
 		end
 
-		if CurrentPhase == "Looping" or CurrentPhase == "SceneResuming" then
+		if ActiveZone then
+			for _, LaneData in ConstantLanes do
+				if LaneData.ModelName == "Baseplate" then
+					UpdateBaseplateExclusions(LaneData, Distance, ActiveZone)
+				end
+			end
+		end
+
+		if CurrentPhase == "Looping" then
 			for _, LaneData in SceneryLanes do
 				UpdateLaneLooping(LaneData, Distance)
+			end
+
+		elseif CurrentPhase == "SceneResuming" then
+			for _, LaneData in SceneryLanes do
+				local Zone = if ActiveZone and SceneReplacedLanes[LaneData.ModelName] then ActiveZone else nil
+				UpdateLaneLooping(LaneData, Distance, Zone)
+			end
+
+			if SceneTunnelData and not SceneTunnelData.RestoresApplied and Distance >= SceneTunnelData.RestoreAtDistance then
+				for _, LaneName in SceneTunnelData.RestoreLanes do
+					local Lane = CreateLaneFromTemplate({ ModelName = LaneName, Direction = 1 })
+					table.insert(SceneryLanes, Lane)
+				end
+				SceneTunnelData.RestoresApplied = true
+			end
+
+			if SceneZone and Distance > SceneZone.Right + SceneZone.Right - SceneZone.Left then
+				RestoreAllDecorations()
+				SceneZone = nil
+				table.clear(SceneReplacedLanes)
+			end
+
+			local TransitionActive = Trans and (ServerNow - Trans.StartTime) < Trans.Duration
+			if not TransitionActive and SceneZone == nil and (SceneTunnelData == nil or SceneTunnelData.RestoresApplied) then
+				SceneTunnelData = nil
+				CurrentPhase = "Looping"
 			end
 
 		elseif CurrentPhase == "TunnelIncoming" then
@@ -495,34 +816,19 @@ do
 
 		elseif CurrentPhase == "SceneStopping" then
 			for _, LaneData in SceneryLanes do
-				UpdateLaneLooping(LaneData, Distance)
+				local Zone = if ActiveZone and SceneReplacedLanes[LaneData.ModelName] then ActiveZone else nil
+				UpdateLaneLooping(LaneData, Distance, Zone)
 			end
 
-			if SceneInstance and SceneInstance.Parent then
-				local SceneOffset = SceneStopDistance - Distance
-				local RefAnchor = if #ConstantLanes > 0
-					then ConstantLanes[1].AnchorCFrame
-					else CFrame.new()
-				local RefDir = if #ConstantLanes > 0
-					then ConstantLanes[1].Direction
-					else 1
-				SceneInstance:PivotTo(RefAnchor * CFrame.new(RefDir * SceneOffset, 0, 0))
-			end
-
-			local TailOffset = 0
-			if SceneInstance then
-				TailOffset = GetBoundsX(SceneInstance)
-			end
-			for Idx, Inst in SceneTailInstances do
-				local Width = GetBoundsX(Inst)
-				local InstOffset = SceneStopDistance + TailOffset + (Idx - 1) * Width - Distance
-				local RefAnchor = if #ConstantLanes > 0
-					then ConstantLanes[1].AnchorCFrame
-					else CFrame.new()
-				local RefDir = if #ConstantLanes > 0
-					then ConstantLanes[1].Direction
-					else 1
-				Inst:PivotTo(RefAnchor * CFrame.new(RefDir * InstOffset, 0, 0))
+			if SceneTunnelData and not SceneTunnelData.DrainsApplied and Distance >= SceneTunnelData.DrainAtDistance then
+				for _, LaneName in SceneTunnelData.DrainLanes do
+					for _, LaneData in SceneryLanes do
+						if LaneData.ModelName == LaneName and LaneData.Active then
+							DestroyLane(LaneData)
+						end
+					end
+				end
+				SceneTunnelData.DrainsApplied = true
 			end
 
 			if CurrentSpeed <= 0.01 then
@@ -530,15 +836,9 @@ do
 			end
 
 		elseif CurrentPhase == "SceneStopped" then
-			if SceneInstance and SceneInstance.Parent then
-				local SceneOffset = SceneStopDistance - Distance
-				local RefAnchor = if #ConstantLanes > 0
-					then ConstantLanes[1].AnchorCFrame
-					else CFrame.new()
-				local RefDir = if #ConstantLanes > 0
-					then ConstantLanes[1].Direction
-					else 1
-				SceneInstance:PivotTo(RefAnchor * CFrame.new(RefDir * SceneOffset, 0, 0))
+			for _, LaneData in SceneryLanes do
+				local Zone = if ActiveZone and SceneReplacedLanes[LaneData.ModelName] then ActiveZone else nil
+				UpdateLaneLooping(LaneData, Distance, Zone)
 			end
 		end
 

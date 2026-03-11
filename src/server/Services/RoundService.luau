@@ -1,6 +1,5 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 
 local Constants = require(ReplicatedStorage.Shared.Constants)
 local RoundNetwork = require(ReplicatedStorage.Shared.Network.RoundNetwork)
@@ -9,7 +8,7 @@ local SpawnService = require(script.Parent.SpawnService)
 local RoleService = require(script.Parent.RoleService)
 
 local RoundConst = Constants.Round
-local MinPlayers = if RunService:IsStudio() then 1 else RoundConst.MIN_PLAYERS
+local MinPlayers = if Constants.SOLO_TEST_ENABLED then 1 else RoundConst.MIN_PLAYERS
 local RoundService = {}
 
 local CurrentPhase: string = "Intermission"
@@ -335,7 +334,7 @@ local function RoundLoop()
 	while true do
 		ResetRoundState()
 		CurrentPhase = "Intermission"
-		PhaseEndTime = Now() + (RunService:IsStudio() and 6 or RoundConst.INTERMISSION_DURATION)
+		PhaseEndTime = Now() + (Constants.SOLO_TEST_ENABLED and 6 or RoundConst.INTERMISSION_DURATION)
 		RoundEndTime = 0
 		BroadcastPhaseChange()
 

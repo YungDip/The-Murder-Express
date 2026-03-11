@@ -15,7 +15,7 @@ local WorldScrollNetwork = ByteNet.defineNamespace("WorldScroll", function()
 					ScrollTransitionDuration = ByteNet.float64,
 					ActiveScenery = ByteNet.array(ByteNet.string),
 					Phase = ByteNet.string,
-					SceneModel = ByteNet.string,
+					SceneModels = ByteNet.array(ByteNet.string),
 				}),
 				reliabilityType = "reliable",
 			}),
@@ -47,7 +47,7 @@ local WorldScrollNetwork = ByteNet.defineNamespace("WorldScroll", function()
 
 			SceneStop = ByteNet.definePacket({
 				value = ByteNet.struct({
-					SceneModel = ByteNet.string,
+					SceneModels = ByteNet.array(ByteNet.string),
 					StopDistance = ByteNet.float64,
 					ScrollBaseDistance = ByteNet.float64,
 					ScrollBaseTime = ByteNet.float64,
@@ -57,7 +57,6 @@ local WorldScrollNetwork = ByteNet.defineNamespace("WorldScroll", function()
 					ScrollTransitionEndSpeed = ByteNet.float64,
 					ScrollTransitionStartTime = ByteNet.float64,
 					ScrollTransitionDuration = ByteNet.float64,
-					TailScenery = ByteNet.array(ByteNet.string),
 				}),
 				reliabilityType = "reliable",
 			}),
@@ -76,6 +75,29 @@ local WorldScrollNetwork = ByteNet.defineNamespace("WorldScroll", function()
 				}),
 				reliabilityType = "reliable",
 			}),
+
+			SceneTunnelStop = ByteNet.definePacket({
+				value = ByteNet.struct({
+					SceneModels = ByteNet.array(ByteNet.string),
+					StopDistance = ByteNet.float64,
+					TunnelModel = ByteNet.string,
+					ApproachTunnelCenters = ByteNet.array(ByteNet.float64),
+					DepartureTunnelCenters = ByteNet.array(ByteNet.float64),
+					DrainLanes = ByteNet.array(ByteNet.string),
+					DrainAtDistance = ByteNet.float64,
+					RestoreLanes = ByteNet.array(ByteNet.string),
+					RestoreAtDistance = ByteNet.float64,
+					ScrollBaseDistance = ByteNet.float64,
+					ScrollBaseTime = ByteNet.float64,
+					ScrollSpeed = ByteNet.float64,
+					ScrollHasTransition = ByteNet.bool,
+					ScrollTransitionStartSpeed = ByteNet.float64,
+					ScrollTransitionEndSpeed = ByteNet.float64,
+					ScrollTransitionStartTime = ByteNet.float64,
+					ScrollTransitionDuration = ByteNet.float64,
+				}),
+				reliabilityType = "reliable",
+			}),
 		},
 		queries = {
 			RequestState = ByteNet.defineQuery({
@@ -91,7 +113,7 @@ local WorldScrollNetwork = ByteNet.defineNamespace("WorldScroll", function()
 					ScrollTransitionDuration = ByteNet.float64,
 					ActiveScenery = ByteNet.array(ByteNet.string),
 					Phase = ByteNet.string,
-					SceneModel = ByteNet.string,
+					SceneModels = ByteNet.array(ByteNet.string),
 				}),
 			}),
 		},
