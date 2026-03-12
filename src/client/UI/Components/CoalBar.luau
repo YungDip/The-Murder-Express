@@ -15,46 +15,61 @@ local EXIT_DURATION = 0.5
 local COAL_WIDTH = 44
 local COAL_HEIGHT = 36
 local COAL_SPACING = 8
-local COAL_CORNER = UDim.new(0, 10)
 
 -- Per-slot rotations for a natural, hand-placed look
 local SLOT_ROTATIONS = { -4, 2, -1, 3, -2, 1, -3, 4, 0, -2 }
 
--- Mineral spots on filled coal pieces
+-- Mineral/quartz spots on filled coal pieces
 local COAL_SPOTS = {
 	{ X = 0.25, Y = 0.30, Size = 5, Color = Color3.fromRGB(140, 140, 140) },
 	{ X = 0.62, Y = 0.48, Size = 4, Color = Color3.fromRGB(175, 175, 175) },
-	{ X = 0.38, Y = 0.72, Size = 3, Color = Color3.fromRGB(110, 110, 110) },
+	{ X = 0.40, Y = 0.68, Size = 3, Color = Color3.fromRGB(110, 110, 110) },
 }
 
+-- Geode/ore outline — angular, irregular rock chunk
+-- Clockwise from top-left, last point closes back to start
+local GEODE_SHAPE = {
+	{ 0.15, 0.05 },
+	{ 0.52, 0.00 },
+	{ 0.82, 0.08 },
+	{ 0.97, 0.40 },
+	{ 0.88, 0.78 },
+	{ 0.65, 0.97 },
+	{ 0.30, 0.92 },
+	{ 0.05, 0.65 },
+	{ 0.02, 0.28 },
+	{ 0.15, 0.05 },
+}
+
+local GeodeControlPoints: { Path2DControlPoint } = {}
+for _, P in GEODE_SHAPE do
+	table.insert(GeodeControlPoints, Path2DControlPoint.new(UDim2.fromScale(P[1], P[2])))
+end
+
 local function CoalSlot(Props: { Index: number, Filled: boolean, Opacity: any })
+	local OutlineRef = React.useRef(nil :: Path2D?)
+
+	React.useEffect(function()
+		if OutlineRef.current then
+			OutlineRef.current:SetControlPoints(GeodeControlPoints)
+		end
+	end, {})
+
 	local Rotation = SLOT_ROTATIONS[((Props.Index - 1) % #SLOT_ROTATIONS) + 1]
 
-	local Children: { [string]: any } = {
+	local FillChildren: { [string]: any } = {
 		Corner = E("UICorner", {
-			CornerRadius = COAL_CORNER,
-		}),
-		Stroke = E("UIStroke", {
-			Color = Colors.GoldMuted,
-			Thickness = Stylesheet.Stroke.Normal,
-			Transparency = Props.Opacity:map(function(A: number) return 1 - A * 0.8 end),
+			CornerRadius = UDim.new(0.3, 0),
 		}),
 	}
 
 	if Props.Filled then
-		local FillChildren: { [string]: any } = {
-			FillCorner = E("UICorner", {
-				CornerRadius = COAL_CORNER,
-			}),
-		}
-
 		for SpotIndex, Spot in COAL_SPOTS do
 			FillChildren["Spot" .. SpotIndex] = E("Frame", {
 				AnchorPoint = Vector2.new(0.5, 0.5),
 				Position = UDim2.fromScale(Spot.X, Spot.Y),
 				Size = UDim2.fromOffset(Spot.Size, Spot.Size),
 				BackgroundColor3 = Spot.Color,
-				BackgroundTransparency = Props.Opacity:map(function(A: number) return 1 - A * 0.6 end),
 				BorderSizePixel = 0,
 				ZIndex = 2,
 			}, {
@@ -63,25 +78,33 @@ local function CoalSlot(Props: { Index: number, Filled: boolean, Opacity: any })
 				}),
 			})
 		end
-
-		Children.Fill = E("Frame", {
-			Size = UDim2.fromScale(1, 1),
-			BackgroundColor3 = Color3.fromRGB(25, 20, 15),
-			BackgroundTransparency = Props.Opacity:map(function(A: number) return 1 - A end),
-			BorderSizePixel = 0,
-		}, FillChildren)
 	end
 
-	return E("Frame", {
+	return E("CanvasGroup", {
 		Size = UDim2.fromOffset(COAL_WIDTH, COAL_HEIGHT),
-		BackgroundColor3 = Colors.MediumBrown,
-		BackgroundTransparency = Props.Opacity:map(function(A: number)
-			return 1 - A * (if Props.Filled then 0.15 else 0.5)
-		end),
+		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
+		GroupTransparency = Props.Opacity:map(function(A: number) return 1 - A end),
 		Rotation = Rotation,
 		LayoutOrder = Props.Index,
-	}, Children)
+	}, {
+		Fill = E("Frame", {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.new(1, -6, 1, -4),
+			BackgroundColor3 = if Props.Filled then Color3.fromRGB(25, 20, 15) else Colors.MediumBrown,
+			BackgroundTransparency = if Props.Filled then 0 else 0.4,
+			BorderSizePixel = 0,
+			ZIndex = 1,
+		}, FillChildren),
+
+		Outline = E("Path2D", {
+			ref = OutlineRef,
+			Color3 = Colors.GoldMuted,
+			Thickness = Stylesheet.Stroke.Normal,
+			ZIndex = 3,
+		}),
+	})
 end
 
 local function CoalBar()
