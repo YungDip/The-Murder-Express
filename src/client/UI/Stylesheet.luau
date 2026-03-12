@@ -30,6 +30,11 @@ Stylesheet.Colors = {
 	-- Status
 	Alive = Color3.fromRGB(120, 180, 90),
 	Dead = Color3.fromRGB(160, 55, 50),
+
+	-- Coal
+	CoalOrange = Color3.fromRGB(230, 140, 30),
+	CoalYellow = Color3.fromRGB(245, 210, 60),
+	CoalEmber = Color3.fromRGB(180, 60, 20),
 }
 
 Stylesheet.RoleColors = {

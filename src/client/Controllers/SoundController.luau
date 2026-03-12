@@ -45,6 +45,7 @@ local function FadeInterior(Zone: ZoneCheck.Zone)
 end
 
 function SoundController.InitInterior()
+	InteriorSound.Looped = true
 	InteriorSound.Volume = 0
 
 	ZoneCheck.OnChanged(FadeInterior)
@@ -78,6 +79,10 @@ local function FadeWeather(Zone: ZoneCheck.Zone)
 end
 
 function SoundController.InitWeather()
+	RainSound.Looped = true
+	BlizzardSound.Looped = true
+	WindSound.Looped = true
+
 	RainSound.Volume = 0
 	BlizzardSound.Volume = 0
 	WindSound.Volume = 0
@@ -249,6 +254,11 @@ do
 			end
 			return
 		end
+
+		if not InteriorSound.IsPlaying then InteriorSound:Play() end
+		if not RainSound.IsPlaying then RainSound:Play() end
+		if not BlizzardSound.IsPlaying then BlizzardSound:Play() end
+		if not WindSound.IsPlaying then WindSound:Play() end
 
 		local SpeedRatio = ScrollSpeedState.SpeedRatio
 

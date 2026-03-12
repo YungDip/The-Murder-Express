@@ -6,6 +6,7 @@ local RoundNetwork = require(ReplicatedStorage.Shared.Network.RoundNetwork)
 local AnnouncementService = require(script.Parent.AnnouncementService)
 local SpawnService = require(script.Parent.SpawnService)
 local RoleService = require(script.Parent.RoleService)
+local CoinService = require(script.Parent.CoinService)
 
 local RoundConst = Constants.Round
 local MinPlayers = if Constants.SOLO_TEST_ENABLED then 1 else RoundConst.MIN_PLAYERS
@@ -397,6 +398,8 @@ local function RoundLoop()
 		PhaseEndTime = RoundEndTime
 		BroadcastPhaseChange()
 
+		CoinService.SpawnCoins()
+
 		for _, PlayerInstance in Participants do
 			HookParticipantDeath(PlayerInstance)
 		end
@@ -413,6 +416,8 @@ local function RoundLoop()
 		while Now() < PostEndTime do
 			task.wait(0.5)
 		end
+
+		CoinService.DespawnAll()
 
 		TeleportSurvivorsToLobby()
 

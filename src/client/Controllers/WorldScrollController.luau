@@ -594,12 +594,17 @@ WorldScrollNetwork.packets.SceneTunnelStop.listen(function(Data)
 	end
 
 	local OneShotsToSpawn: {{ModelName: string, ReplacesLane: string?}} = {}
+	local TilingToSpawn: {string} = {}
 	for _, ModelName in Data.SceneModels do
 		if not ActiveSet[ModelName] then
 			local ReplacesLane = SceneModelToLane[ModelName]
-			table.insert(OneShotsToSpawn, {ModelName = ModelName, ReplacesLane = ReplacesLane})
-			if ReplacesLane and not TunnelDrainSet[ReplacesLane] then
-				SceneReplacedLanes[ReplacesLane] = true
+			if ReplacesLane then
+				table.insert(OneShotsToSpawn, {ModelName = ModelName, ReplacesLane = ReplacesLane})
+				if not TunnelDrainSet[ReplacesLane] then
+					SceneReplacedLanes[ReplacesLane] = true
+				end
+			else
+				table.insert(TilingToSpawn, ModelName)
 			end
 		end
 	end
@@ -619,6 +624,26 @@ WorldScrollNetwork.packets.SceneTunnelStop.listen(function(Data)
 		local Right = SpawnDist + OneShotHalf
 		if Left < ZoneLeft then ZoneLeft = Left end
 		if Right > ZoneRight then ZoneRight = Right end
+	end
+
+	-- Tile models back-to-back across the tiling range
+	for _, ModelName in TilingToSpawn do
+		local Template = GetTemplate(ModelName)
+		local TileWidth = GetBoundsX(Template)
+		if TileWidth <= 0 then
+			continue
+		end
+
+		local Cursor = Data.TilingStart
+		while Cursor + TileWidth / 2 <= Data.TilingEnd do
+			local Center = Cursor + TileWidth / 2
+			SpawnOneShotTile(ModelName, Center, 1, Template:GetPivot())
+
+			if Center - TileWidth / 2 < ZoneLeft then ZoneLeft = Center - TileWidth / 2 end
+			if Center + TileWidth / 2 > ZoneRight then ZoneRight = Center + TileWidth / 2 end
+
+			Cursor += TileWidth
+		end
 	end
 
 	if ZoneLeft < ZoneRight then
@@ -847,7 +872,7 @@ do
 			UpdateOneShotTile(Tile, Distance)
 
 			local BehindBy = Distance - Tile.SpawnDistance
-			if BehindBy > Tile.TileWidth * 2 then
+			if BehindBy > Constants.WorldScroll.ONESHOT_CLEANUP_BUFFER then
 				CleanupOneShotTile(Tile)
 			end
 		end

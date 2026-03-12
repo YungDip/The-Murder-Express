@@ -16,7 +16,7 @@ local Space = Stylesheet.Spacing
 
 local ROLES_SEQUENCE = { "Innocent", "Detective", "Murderer" }
 local TOTAL_CYCLES = 10
-local SLOT_HEIGHT = 50
+local SLOT_HEIGHT = 38
 local TOTAL_SLOTS = TOTAL_CYCLES * #ROLES_SEQUENCE
 
 local function Roulette()
@@ -211,7 +211,7 @@ local function Roulette()
 			BackgroundTransparency = 1,
 			FontFace = Fonts.Accent,
 			TextColor3 = RoleColor,
-			TextSize = Sizes.Title,
+			TextSize = Sizes.Subtitle,
 			Text = string.upper(RoleName),
 			TextTransparency = ContentOpacity:map(function(O: number) return 1 - O end),
 		})
@@ -234,8 +234,8 @@ local function Roulette()
 
 		HeaderContainer = E("Frame", {
 			AnchorPoint = Vector2.new(0.5, 1),
-			Position = UDim2.new(0.5, 0, 0.5, -(SLOT_HEIGHT / 2) - 20),
-			Size = UDim2.new(0.3, 0, 0, 40),
+			Position = UDim2.new(0.5, 0, 0.52, -(SLOT_HEIGHT / 2) - 16),
+			Size = UDim2.new(0.3, 0, 0, 34),
 			BackgroundTransparency = 1,
 			ZIndex = 2,
 		}, {
@@ -282,9 +282,9 @@ local function Roulette()
 
 		RouletteBox = E("Frame", {
 			AnchorPoint = Vector2.new(0.5, 0.5),
-			Position = UDim2.fromScale(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.52),
 			Size = ContainerScale:map(function(S: number)
-				return UDim2.new(0.22 * S, 0, 0, math.floor(SLOT_HEIGHT * S))
+				return UDim2.new(0.18 * S, 0, 0, math.floor(SLOT_HEIGHT * S))
 			end),
 			BackgroundColor3 = Colors.DarkBrown,
 			BackgroundTransparency = ContainerOpacity:map(function(O: number) return 1 - O end),

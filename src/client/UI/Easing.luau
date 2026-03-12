@@ -31,6 +31,12 @@ function Easing.EaseOutQuart(T: number): number
 	return 1 - (1 - T) ^ 4
 end
 
+function Easing.EaseInBack(T: number): number
+	local C1 = 1.70158
+	local C3 = C1 + 1
+	return C3 * T * T * T - C1 * T * T
+end
+
 function Easing.EaseOutBack(T: number): number
 	local C1 = 1.70158
 	local C3 = C1 + 1

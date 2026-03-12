@@ -65,6 +65,9 @@ Constants.WorldScroll = {
 	-- ensuring it spawns well ahead of all visible looping tiles
 	SCENE_APPROACH_BUFFER = 800,
 
+	-- How far behind (studs) a one-shot tile can be before cleanup
+	ONESHOT_CLEANUP_BUFFER = 600,
+
 	-- Duration (seconds) of the braking phase when stopping at a scene
 	SCENE_BRAKE_DURATION = 8,
 }
@@ -155,6 +158,42 @@ Constants.Announcement = {
 	SMALL_PADDING_H = 12,
 	SMALL_WIDTH = 0.5,
 	SMALL_THRESHOLD = 1080,
+}
+
+Constants.Coin = {
+	SPAWN_CHANCE = 0.15,
+	PICKUP_REWARD = 10,
+	PICKUP_RADIUS = 4,
+	SERVER_VERIFY_RADIUS = 8,
+	RAYCAST_DOWN_DISTANCE = 50,
+	BOB_AMPLITUDE = 0.25,
+	BOB_FREQUENCY = 1,
+	SPIN_SPEED = 180,
+	COLLECT_SPIN_SPEED = 720,
+	CLIENT_CHECK_INTERVAL = 0.1,
+	HEIGHT_OFFSET = 1.5,
+	RENDER_DISTANCE = 150,
+}
+
+Constants.Coal = {
+	REQUIRED_COAL = 5,
+	COLLECTION_TAG = "CoalCollection",
+	COAL_NAME = "MoveableCoal",
+	BOARDING_WARNING_DURATION = 20,
+	SHRINK_DURATION = 0.3,
+	SLIDE_DURATION = 0.35,
+	FALL_DURATION = 0.25,
+
+	-- Toggle-click carry
+	CARRY_MAX_FORCE = 20000,
+	CARRY_RESPONSIVENESS = 25,
+	CARRY_RAY_DISTANCE = 50,
+	CARRY_HOVER_HEIGHT = 1.5,
+	PICKUP_MAX_DISTANCE = 12,
+
+	-- Server-side ground plane (baseplates are client-only)
+	GROUND_SIZE = Vector3.new(120, 2, 80),
+	GROUND_Y_OFFSET = -1,
 }
 
 Constants.VERSION = "0.1.0"

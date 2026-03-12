@@ -8,8 +8,8 @@ local Easing = require(script.Parent.Parent.Easing)
 
 local E = React.createElement
 
-local BLADE_COUNT = 12
-local STAGGER_OVERLAP = 0.45
+local SLAT_COUNT = 14
+local STAGGER_OVERLAP = 0.65
 
 local function Shutter()
 	local Request = Hooks.UseSignal(UIState.ShutterChanged, UIState.ShutterState)
@@ -74,50 +74,173 @@ local function Shutter()
 		return nil
 	end
 
-	local Step = (1 - STAGGER_OVERLAP) / BLADE_COUNT
-	local BladeDuration = STAGGER_OVERLAP + Step
+	local Step = (1 - STAGGER_OVERLAP) / SLAT_COUNT
+	local SlatDuration = STAGGER_OVERLAP + Step
+	local SlatHeight = 1 / SLAT_COUNT + 0.012
 
-	local Blades = {}
-	for I = 0, BLADE_COUNT - 1 do
-		local FromRight = I % 2 == 0
-		local BladeStart = I * Step
-		local OffscreenX = if FromRight then 1.5 else -1.5
+	local Elements = {}
 
-		Blades["Blade" .. I] = E("Frame", {
-			Position = Progress:map(function(P: number)
-				local BladeT = math.clamp((P - BladeStart) / BladeDuration, 0, 1)
-				local Eased = Easing.Smoothstep(BladeT)
-				local Action = ActionRef.current
+	for I = 0, SLAT_COUNT - 1 do
+		local CloseSlatStart = I * Step
+		local OpenSlatStart = (SLAT_COUNT - 1 - I) * Step
+		local FinalY = I / SLAT_COUNT
+		local IsLastSlat = I == SLAT_COUNT - 1
+		local IsEvenSlat = I % 2 == 0
 
-				local XOffset
-				if Action == "close" then
-					XOffset = OffscreenX * (1 - Eased)
-				else
-					XOffset = OffscreenX * Eased
-				end
+		local Children = {}
 
-				return UDim2.fromScale(XOffset, I / BLADE_COUNT)
-			end),
-			Size = UDim2.fromScale(1, 1 / BLADE_COUNT + 0.003),
-			BackgroundColor3 = BgColor,
+		-- Curved metal highlight (subtle light on convex top surface)
+		Children.MetalHighlight = E("Frame", {
+			Size = UDim2.fromScale(1, 0.5),
+			Position = UDim2.fromScale(0, 0),
+			BackgroundColor3 = Color3.new(1, 1, 1),
+			BackgroundTransparency = if IsEvenSlat then 0.92 else 0.94,
 			BorderSizePixel = 0,
-			ZIndex = BLADE_COUNT - I,
+			ZIndex = 1,
 		}, {
-			TopEdge = E("Frame", {
-				Size = UDim2.new(1, 0, 0, 1),
-				Position = UDim2.fromScale(0, 0),
-				BackgroundColor3 = Color3.new(1, 1, 1),
-				BackgroundTransparency = 0.85,
-				BorderSizePixel = 0,
-			}),
-			BottomEdge = E("Frame", {
-				Size = UDim2.new(1, 0, 0, 1),
-				Position = UDim2.new(0, 0, 1, -1),
-				BackgroundColor3 = Color3.new(0, 0, 0),
-				BackgroundTransparency = 0.6,
-				BorderSizePixel = 0,
+			Gradient = E("UIGradient", {
+				Transparency = NumberSequence.new({
+					NumberSequenceKeypoint.new(0, 0),
+					NumberSequenceKeypoint.new(0.4, 0.6),
+					NumberSequenceKeypoint.new(1, 1),
+				}),
+				Rotation = 90,
 			}),
 		})
+
+		-- Bottom surface shadow (underside of curved slat)
+		Children.MetalShadow = E("Frame", {
+			Size = UDim2.fromScale(1, 0.55),
+			Position = UDim2.fromScale(0, 0.45),
+			BackgroundColor3 = Color3.new(0, 0, 0),
+			BackgroundTransparency = if IsEvenSlat then 0.5 else 0.55,
+			BorderSizePixel = 0,
+			ZIndex = 1,
+		}, {
+			Gradient = E("UIGradient", {
+				Transparency = NumberSequence.new({
+					NumberSequenceKeypoint.new(0, 1),
+					NumberSequenceKeypoint.new(0.3, 0.6),
+					NumberSequenceKeypoint.new(1, 0),
+				}),
+				Rotation = 90,
+			}),
+		})
+
+		-- Top lip highlight
+		Children.TopEdge = E("Frame", {
+			Size = UDim2.new(1, 0, 0, 1),
+			Position = UDim2.fromScale(0, 0),
+			BackgroundColor3 = Color3.new(1, 1, 1),
+			BackgroundTransparency = 0.78,
+			BorderSizePixel = 0,
+			ZIndex = 3,
+		})
+
+		-- Bottom lip shadow
+		Children.BottomEdge = E("Frame", {
+			Size = UDim2.new(1, 0, 0, 2),
+			Position = UDim2.new(0, 0, 1, -2),
+			BackgroundColor3 = Color3.new(0, 0, 0),
+			BackgroundTransparency = 0.15,
+			BorderSizePixel = 0,
+			ZIndex = 3,
+		})
+
+		-- Embossed center ridge highlight
+		Children.RidgeHighlight = E("Frame", {
+			Size = UDim2.new(1, 0, 0, 1),
+			Position = UDim2.fromScale(0, 0.46),
+			BackgroundColor3 = Color3.new(1, 1, 1),
+			BackgroundTransparency = 0.85,
+			BorderSizePixel = 0,
+			ZIndex = 3,
+		})
+
+		-- Embossed center ridge shadow
+		Children.RidgeShadow = E("Frame", {
+			Size = UDim2.new(1, 0, 0, 1),
+			Position = UDim2.fromScale(0, 0.54),
+			BackgroundColor3 = Color3.new(0, 0, 0),
+			BackgroundTransparency = 0.45,
+			BorderSizePixel = 0,
+			ZIndex = 3,
+		})
+
+		-- Edge definition stroke
+		Children.Stroke = E("UIStroke", {
+			Color = Color3.new(0, 0, 0),
+			Thickness = 1,
+			Transparency = 0.5,
+		})
+
+		-- Heavy handle bar on the bottom slat
+		if IsLastSlat then
+			Children.HandleBar = E("Frame", {
+				Size = UDim2.new(1, 0, 0, 8),
+				Position = UDim2.new(0, 0, 1, -8),
+				BackgroundColor3 = BgColor:map(function(C: Color3)
+					return Color3.new(
+						math.clamp(C.R + 0.04, 0, 1),
+						math.clamp(C.G + 0.04, 0, 1),
+						math.clamp(C.B + 0.04, 0, 1)
+					)
+				end),
+				BorderSizePixel = 0,
+				ZIndex = 4,
+			}, {
+				Highlight = E("Frame", {
+					Size = UDim2.new(1, 0, 0, 1),
+					Position = UDim2.fromScale(0, 0),
+					BackgroundColor3 = Color3.new(1, 1, 1),
+					BackgroundTransparency = 0.75,
+					BorderSizePixel = 0,
+				}),
+				Shadow = E("Frame", {
+					Size = UDim2.new(1, 0, 0, 2),
+					Position = UDim2.new(0, 0, 1, -2),
+					BackgroundColor3 = Color3.new(0, 0, 0),
+					BackgroundTransparency = 0.1,
+					BorderSizePixel = 0,
+				}),
+				Corner = E("UICorner", {
+					CornerRadius = UDim.new(0, 2),
+				}),
+				Stroke = E("UIStroke", {
+					Color = Color3.new(0, 0, 0),
+					Thickness = 1,
+					Transparency = 0.5,
+				}),
+			})
+		end
+
+		Elements["Slat" .. I] = E("Frame", {
+			Position = Progress:map(function(P: number)
+				local Action = ActionRef.current
+				local SlatStart = if Action == "close" then CloseSlatStart else OpenSlatStart
+				local SlatT = math.clamp((P - SlatStart) / SlatDuration, 0, 1)
+
+				if Action == "close" then
+					local Eased = Easing.EaseOutQuart(SlatT)
+					return UDim2.fromScale(0, -SlatHeight + (FinalY + SlatHeight) * Eased)
+				else
+					local Eased = Easing.EaseInCubic(SlatT)
+					return UDim2.fromScale(0, FinalY + (-FinalY - SlatHeight) * Eased)
+				end
+			end),
+			Size = UDim2.fromScale(1, SlatHeight),
+			BackgroundColor3 = BgColor:map(function(C: Color3)
+				local Bump = if IsEvenSlat then 0.015 else 0
+				return Color3.new(
+					math.max(C.R, 0.03) + Bump,
+					math.max(C.G, 0.03) + Bump,
+					math.max(C.B, 0.03) + Bump
+				)
+			end),
+			BorderSizePixel = 0,
+			ZIndex = SLAT_COUNT + 1 - I,
+			ClipsDescendants = true,
+		}, Children)
 	end
 
 	return E("Frame", {
@@ -126,7 +249,7 @@ local function Shutter()
 		Size = UDim2.fromScale(1.5, 1.5),
 		BackgroundTransparency = 1,
 		ZIndex = 100,
-	}, Blades)
+	}, Elements)
 end
 
 return Shutter

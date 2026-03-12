@@ -17,6 +17,7 @@ local ScrollState: Types.ScrollState = {
 local ActiveScenery: {string} = {}
 local CurrentPhase: Types.SceneryPhase = "Looping"
 local CurrentSceneModels: {string} = {}
+local CurrentStopDistance: number = 0
 
 local function Now(): number
 	return workspace:GetServerTimeNow()
@@ -182,6 +183,7 @@ function WorldScrollService.StopAtNewScene(SceneComponents: {string}): number
 	end
 
 	local StopDistance = MaxSpawnDist
+	CurrentStopDistance = StopDistance
 
 	-- Compute braking: cruise at full speed, then decelerate over SCENE_BRAKE_DURATION
 	local BrakeDuration = Constants.WorldScroll.SCENE_BRAKE_DURATION
@@ -285,6 +287,7 @@ function WorldScrollService.StopAtNewSceneWithTunnels(SceneComponents: {string},
 	end
 
 	local StopDistance = MaxSpawnDist
+	CurrentStopDistance = StopDistance
 	local SceneLeadingEdge = StopDistance - MainSceneWidth / 2
 	local SceneTrailingEdge = StopDistance + MainSceneWidth / 2
 
@@ -305,6 +308,10 @@ function WorldScrollService.StopAtNewSceneWithTunnels(SceneComponents: {string},
 	local ApproachLeadingEdge = SceneLeadingEdge - TotalTunnelWidth
 	local DrainAtDistance = ApproachLeadingEdge + TotalTunnelWidth / 2
 	local RestoreAtDistance = SceneTrailingEdge + TotalTunnelWidth / 2
+
+	-- Tiling range: halfway into approach tunnel → halfway into departure tunnel
+	local TilingStart = SceneLeadingEdge - TotalTunnelWidth / 2
+	local TilingEnd = SceneTrailingEdge + TotalTunnelWidth / 2
 
 	local BrakeDuration = Constants.WorldScroll.SCENE_BRAKE_DURATION
 	local BrakeDist = CurrentSpeed * BrakeDuration / 2
@@ -336,6 +343,8 @@ function WorldScrollService.StopAtNewSceneWithTunnels(SceneComponents: {string},
 		DrainAtDistance = DrainAtDistance,
 		RestoreLanes = DrainLanes,
 		RestoreAtDistance = RestoreAtDistance,
+		TilingStart = TilingStart,
+		TilingEnd = TilingEnd,
 		ScrollBaseDistance = Flat.ScrollBaseDistance,
 		ScrollBaseTime = Flat.ScrollBaseTime,
 		ScrollSpeed = Flat.ScrollSpeed,
@@ -415,6 +424,28 @@ WorldScrollNetwork.queries.RequestState.listen(function()
 	Flat.SceneModels = CurrentSceneModels
 	return Flat
 end)
+
+--[[
+    returns the world CFrame where a scene model template sits when the train is stopped
+    at StopDistance. When stopped, CurrentDistance == StopDistance, so Offset == 0
+    and the scene is placed at its template pivot.
+]]
+function WorldScrollService.GetSceneCFrame(ModelName: string): CFrame
+	local ZoneModels = ReplicatedStorage:WaitForChild("ZoneModels") :: Folder
+	local Template = ZoneModels:FindFirstChild(ModelName)
+	if not Template then
+		return CFrame.new()
+	end
+	return Template:GetPivot()
+end
+
+function WorldScrollService.GetPhase(): Types.SceneryPhase
+	return CurrentPhase
+end
+
+function WorldScrollService.GetStopDistance(): number
+	return CurrentStopDistance
+end
 
 do
 	local CurrentTime = Now()

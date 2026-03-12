@@ -1,4 +1,5 @@
 local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local React = require(ReplicatedStorage.Packages.react)
@@ -15,6 +16,17 @@ local ShutterRoot = nil
 function Mount.Init()
 	local Player = Players.LocalPlayer
 	local PlayerGui = Player:WaitForChild("PlayerGui")
+
+	-- Disable the default Roblox playerlist
+	local Success = false
+	while not Success do
+		Success = pcall(function()
+			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false)
+		end)
+		if not Success then
+			task.wait()
+		end
+	end
 
 	local ScreenGui = Instance.new("ScreenGui")
 	ScreenGui.Name = "ReactUI"

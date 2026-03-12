@@ -122,13 +122,12 @@ return false
 end
 
 local ACTIVE_PHASES = {
-RoleReveal = true,
-InProgress = true,
-PostRound = true,
+	RoleReveal = true,
+	InProgress = true,
 }
 
 local function ShouldBeActive(Phase: string): boolean
-return ACTIVE_PHASES[Phase] == true and IsLocalParticipant()
+	return ACTIVE_PHASES[Phase] == true and IsLocalParticipant()
 end
 
 local function HandlePhaseChange(Phase: string, NewPhaseEndTime: number, NewRoundEndTime: number?)
@@ -139,41 +138,37 @@ RoundEndTime = NewRoundEndTime
 end
 
 ScrollSpeedState.Active = ShouldBeActive(Phase)
-Atmosphere.Density = if Phase == "Intermission" then 0.04 else 0.4
-print("[RoundController] HandlePhaseChange:", Phase, "| IsParticipant:", IsLocalParticipant(), "| Active:", ScrollSpeedState.Active)
+	Atmosphere.Offset = if Phase == "Intermission" or Phase == "PostRound" then 0.04 else 0.4
+    print("[RoundController] HandlePhaseChange:", Phase, "| IsParticipant:", IsLocalParticipant(), "| Active:", ScrollSpeedState.Active)
 
-if Phase == "Intermission" then
-HideTimer()
-HideRoulette()
-HideScoreboard()
-if UIState.IsShutterClosed then
-UIState.ShutterOpen(3, TELEPORT_FADE_COLOR)
-end
-
-elseif Phase == "Teleporting" then
-HideTimer()
-HideScoreboard()
-if IsLocalParticipant() then
-task.spawn(UIState.ShutterClose, 1.5, TELEPORT_FADE_COLOR)
-end
-
-elseif Phase == "RoleReveal" then
-if IsLocalParticipant() then
-task.spawn(UIState.ShutterOpen, 3, TELEPORT_FADE_COLOR)
-if MyRole then
-task.spawn(PlayRoulette, MyRole)
-end
-end
-
-elseif Phase == "InProgress" then
-HideScoreboard()
-if IsLocalParticipant() then
-ShowTimer()
-end
-
-elseif Phase == "PostRound" then
-HideTimer()
-end
+    if Phase == "Intermission" then
+        HideTimer()
+        HideRoulette()
+        HideScoreboard()
+        if UIState.IsShutterClosed then
+            UIState.ShutterOpen(3, TELEPORT_FADE_COLOR)
+        end
+    elseif Phase == "Teleporting" then
+        HideTimer()
+        HideScoreboard()
+        if IsLocalParticipant() then
+            task.spawn(UIState.ShutterClose, 1.5, TELEPORT_FADE_COLOR)
+        end
+    elseif Phase == "RoleReveal" then
+        if IsLocalParticipant() then
+            task.spawn(UIState.ShutterOpen, 3, TELEPORT_FADE_COLOR)
+            if MyRole then
+                task.spawn(PlayRoulette, MyRole)
+            end
+        end
+    elseif Phase == "InProgress" then
+        HideScoreboard()
+        if IsLocalParticipant() then
+            ShowTimer()
+        end
+    elseif Phase == "PostRound" then
+        HideTimer()
+    end
 end
 
 RoundNetwork.packets.PhaseChange.listen(function(Data)
@@ -235,7 +230,7 @@ EliminatedPlayers = State.Eliminated or {}
 LastResultData = State.ResultData
 
 ScrollSpeedState.Active = ShouldBeActive(State.Phase)
-Atmosphere.Offset = if State.Phase == "Intermission" then 0.04 else 0.4
+	Atmosphere.Offset = if State.Phase == "Intermission" or State.Phase == "PostRound" then 0.04 else 0.4
 print("[RoundController] Initial state sync | Phase:", State.Phase, "| IsParticipant:", IsLocalParticipant(), "| Active:", ScrollSpeedState.Active)
 
 if State.Phase == "InProgress" and IsLocalParticipant() then

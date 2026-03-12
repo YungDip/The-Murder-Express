@@ -121,6 +121,30 @@ function UIState.HideScoreboard()
 	UIState.ScoreboardChanged:Fire(UIState.ScoreboardState)
 end
 
+-- Coal
+UIState.CoalChanged = CreateSignal()
+UIState.CoalState = {
+	Active = false,
+	Current = 0,
+	Required = 0,
+	Filled = false,
+}
+
+function UIState.SetCoalState(Active: boolean, Current: number, Required: number)
+	UIState.CoalState.Active = Active
+	UIState.CoalState.Current = Current
+	UIState.CoalState.Required = Required
+	if not Active then
+		UIState.CoalState.Filled = false
+	end
+	UIState.CoalChanged:Fire(UIState.CoalState)
+end
+
+function UIState.SetCoalFilled(Filled: boolean)
+	UIState.CoalState.Filled = Filled
+	UIState.CoalChanged:Fire(UIState.CoalState)
+end
+
 -- Shutter
 UIState.ShutterChanged = CreateSignal()
 UIState.ShutterCompleted = CreateSignal()
