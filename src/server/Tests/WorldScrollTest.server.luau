@@ -1,3 +1,8 @@
+-- Stop sequences are now handled by RoundService directly.
+-- This test file is disabled to avoid conflicts.
+-- To re-enable manual testing, uncomment the code below.
+
+--[[
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
@@ -75,3 +80,4 @@ while true do
 		task.wait(0.5)
 	end
 end
+--]]

@@ -452,6 +452,18 @@ WorldScrollNetwork.packets.SyncState.listen(function(Data)
 		InitConstantLanes()
 		Initialized = true
 	end
+
+	-- Clean up any leftover one-shot tiles from a previous scene/round
+	for I = #OneShotTiles, 1, -1 do
+		CleanupOneShotTile(OneShotTiles[I])
+	end
+
+	SceneZone = nil
+	table.clear(SceneReplacedLanes)
+	TunnelData = nil
+	SceneTunnelData = nil
+	RestoreAllDecorations()
+
 	SpawnSceneryLanes(Data.ActiveScenery)
 end)
 

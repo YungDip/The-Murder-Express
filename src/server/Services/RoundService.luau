@@ -7,20 +7,29 @@ local AnnouncementService = require(script.Parent.AnnouncementService)
 local SpawnService = require(script.Parent.SpawnService)
 local RoleService = require(script.Parent.RoleService)
 local CoinService = require(script.Parent.CoinService)
+local CoalService = require(script.Parent.CoalService)
+local ToolService = require(script.Parent.ToolService)
+local WorldScrollService = require(script.Parent.WorldScrollService)
 
 local RoundConst = Constants.Round
+local DefaultSpeed = Constants.WorldScroll.DEFAULT_SPEED
 local MinPlayers = if Constants.SOLO_TEST_ENABLED then 1 else RoundConst.MIN_PLAYERS
 local RoundService = {}
 
 local CurrentPhase: string = "Intermission"
 local PhaseEndTime: number = 0
 local RoundEndTime: number = 0
+local RoundStartTime: number = 0
+local TotalCoalCollected: number = 0
+local TotalCoalRequired: number = 0
+local StopsCompleted: number = 0
 local Participants: { Player } = {}
 local RoleMap: { [Player]: string } = {}
 local EliminatedPlayers: { { Name: string, Role: string, UserId: number } } = {}
 local DeathConnections: { [Player]: RBXScriptConnection } = {}
 local CharacterAddedConnections: { [Player]: RBXScriptConnection } = {}
 local LastResultData: { Result: string, Players: { { Name: string, Role: string, Alive: boolean, UserId: number } } }? = nil
+local RagdollBodies: { Model } = {}
 
 local function Now(): number
 	return workspace:GetServerTimeNow()
@@ -131,14 +140,17 @@ local function CheckWinConditions(): string?
 
 	local Alive = GetAliveParticipants()
 	local MurdererAlive = false
-	local NonMurdererAlive = false
+	local DetectiveAlive = false
+	local InnocentAlive = false
 
 	for _, PlayerInstance in Alive do
 		local Role = RoleMap[PlayerInstance]
 		if Role == "Murderer" then
 			MurdererAlive = true
+		elseif Role == "Detective" then
+			DetectiveAlive = true
 		else
-			NonMurdererAlive = true
+			InnocentAlive = true
 		end
 	end
 
@@ -146,7 +158,12 @@ local function CheckWinConditions(): string?
 		return "DetectiveWin"
 	end
 
-	if not NonMurdererAlive then
+	if not DetectiveAlive and not InnocentAlive then
+		return "MurdererWin"
+	end
+
+	-- Murderer killed all innocents, only Detective remains
+	if not InnocentAlive and DetectiveAlive and #Participants >= 3 then
 		return "MurdererWin"
 	end
 
@@ -162,10 +179,15 @@ local function EndRound(Result: string)
 	end
 	table.clear(DeathConnections)
 
+	-- Keep CharacterAdded connections for eliminated players so they respawn to lobby
 	for PlayerInstance, Connection in CharacterAddedConnections do
-		Connection:Disconnect()
+		if not IsEliminated(PlayerInstance) then
+			Connection:Disconnect()
+			CharacterAddedConnections[PlayerInstance] = nil
+		end
 	end
-	table.clear(CharacterAddedConnections)
+
+	ToolService.CleanupTools(Participants)
 
 	local PlayerList = BuildResultPlayerList()
 	LastResultData = {
@@ -207,17 +229,98 @@ local function OnParticipantDied(PlayerInstance: Player)
 		UserId = PlayerInstance.UserId,
 	})
 
+	RoundEndTime += RoundConst.KILL_TIME_BONUS
+	PhaseEndTime = RoundEndTime
+	BroadcastPhaseChange()
+
+	-- Clone character as ragdoll body right before respawn (after ragdoll settles)
+	task.spawn(function()
+		local Character = PlayerInstance.Character
+		if not Character then
+			return
+		end
+
+		-- Wait for ragdoll to settle (just before auto-respawn)
+		local WaitTime = math.max(0, Players.RespawnTime - 0.5)
+		task.wait(WaitTime)
+
+		-- Re-check character is still the dead one
+		if PlayerInstance.Character ~= Character then
+			return
+		end
+
+		-- Force Archivable so Clone() captures all instances
+		Character.Archivable = true
+		for _, Desc in Character:GetDescendants() do
+			pcall(function() Desc.Archivable = true end)
+		end
+
+		local Ragdoll = Character:Clone()
+
+		-- Remove tools, scripts, and humanoid from the clone
+		for _, Desc in Ragdoll:GetDescendants() do
+			if Desc:IsA("Tool") or Desc:IsA("BaseScript") then
+				Desc:Destroy()
+			end
+		end
+
+		-- Anchor all parts and disable collision BEFORE removing humanoid
+		for _, Desc in Ragdoll:GetDescendants() do
+			if Desc:IsA("BasePart") then
+				Desc.Anchored = true
+				Desc.CanCollide = false
+			end
+		end
+
+		local RagdollHumanoid = Ragdoll:FindFirstChildOfClass("Humanoid")
+		if RagdollHumanoid then
+			RagdollHumanoid:Destroy()
+		end
+
+		Ragdoll.Name = PlayerInstance.Name .. "_Ragdoll"
+		Ragdoll.Parent = workspace
+		table.insert(RagdollBodies, Ragdoll)
+	end)
+
 	if CharacterAddedConnections[PlayerInstance] then
 		CharacterAddedConnections[PlayerInstance]:Disconnect()
 	end
-	CharacterAddedConnections[PlayerInstance] = PlayerInstance.CharacterAdded:Connect(function()
-		task.wait()
-		SpawnService.TeleportToLobby(PlayerInstance)
+	CharacterAddedConnections[PlayerInstance] = PlayerInstance.CharacterAdded:Connect(function(NewCharacter)
+		local Humanoid = NewCharacter:WaitForChild("Humanoid")
+		NewCharacter:WaitForChild("HumanoidRootPart")
+		Humanoid:GetPropertyChangedSignal("RootPart"):Wait()
+		task.wait(0.1)
 		if CharacterAddedConnections[PlayerInstance] then
-			CharacterAddedConnections[PlayerInstance]:Disconnect()
-			CharacterAddedConnections[PlayerInstance] = nil
+			NewCharacter:PivotTo(SpawnService.GetLobbySpawn())
 		end
 	end)
+
+	if Role == "Detective" then
+		local DeathPosition = Vector3.zero
+		local DetectiveCharacter = PlayerInstance.Character
+		if DetectiveCharacter then
+			local Root = DetectiveCharacter:FindFirstChild("HumanoidRootPart")
+			if Root then
+				DeathPosition = Root.Position
+			end
+		end
+
+		local SpawnCFrame = SpawnService.GetNearestSafeSpawn(DeathPosition)
+		ToolService.SpawnGunPickup(SpawnCFrame, function(Picker: Player)
+			if IsEliminated(Picker) then
+				return false
+			end
+			if not IsParticipant(Picker) then
+				return false
+			end
+			local PickerRole = RoleMap[Picker]
+			return PickerRole ~= "Murderer"
+		end, function(Picker: Player)
+			RoleMap[Picker] = "Detective"
+			Picker:SetAttribute("Role", "Detective")
+			RoundNetwork.packets.RoleAssignment.sendTo({ Role = "Detective" }, Picker)
+		end)
+	end
 
 	local Result = CheckWinConditions()
 	if Result then
@@ -309,11 +412,60 @@ local function ResetRoundState()
 	end
 	table.clear(CharacterAddedConnections)
 
+	ToolService.CleanupTools(Participants)
 	RoleService.ClearRoles(Participants)
 	table.clear(Participants)
 	table.clear(RoleMap)
 	table.clear(EliminatedPlayers)
+	TotalCoalCollected = 0
+	TotalCoalRequired = 0
+	StopsCompleted = 0
 	LastResultData = nil
+
+	for _, Ragdoll in RagdollBodies do
+		if Ragdoll and Ragdoll.Parent then
+			Ragdoll:Destroy()
+		end
+	end
+	table.clear(RagdollBodies)
+end
+
+local StrayRayParams = RaycastParams.new()
+StrayRayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+--[[
+    returns true if the player's character is standing on the train
+]]
+local function IsPlayerOnTrain(PlayerInstance: Player): boolean
+	local Character = PlayerInstance.Character
+	if not Character then
+		return false
+	end
+	local Root = Character:FindFirstChild("HumanoidRootPart")
+	if not Root then
+		return false
+	end
+
+	StrayRayParams.FilterDescendantsInstances = { Character }
+	local Result = workspace:Raycast(Root.Position, Vector3.new(0, -15, 0), StrayRayParams)
+	if Result and Result.Instance then
+		local TrainModel = workspace:FindFirstChild("Train")
+		if TrainModel and Result.Instance:IsDescendantOf(TrainModel) then
+			return true
+		end
+	end
+	return false
+end
+
+--[[
+    teleports all alive participants who are not on the train to the nearest car
+]]
+local function TeleportStrayPlayersToTrain()
+	for _, PlayerInstance in GetAliveParticipants() do
+		if not IsPlayerOnTrain(PlayerInstance) then
+			SpawnService.TeleportToNearestCar(PlayerInstance)
+		end
+	end
 end
 
 --[[
@@ -334,6 +486,7 @@ end
 local function RoundLoop()
 	while true do
 		ResetRoundState()
+		WorldScrollService.Reset()
 		CurrentPhase = "Intermission"
 		PhaseEndTime = Now() + (Constants.SOLO_TEST_ENABLED and 6 or RoundConst.INTERMISSION_DURATION)
 		RoundEndTime = 0
@@ -343,7 +496,7 @@ local function RoundLoop()
 		while true do
 			local PlayerCount = #Players:GetPlayers()
 			if PlayerCount >= MinPlayers then
-				AnnouncementService.AnnounceAll("Round starting!", "Get ready...", RoundConst.INTERMISSION_DURATION - 2)
+				AnnouncementService.AnnounceAll("Prepare for Departure", "The train will be leaving shortly...", RoundConst.INTERMISSION_DURATION - 2)
 				local EndTime = PhaseEndTime
 				while Now() < EndTime do
 					task.wait(0.5)
@@ -355,14 +508,14 @@ local function RoundLoop()
 				if #Players:GetPlayers() >= MinPlayers then
 					break
 				else
-					AnnouncementService.AnnounceAll("Not enough players", "Waiting for more players...", 3)
+					AnnouncementService.AnnounceAll("Departure Delayed", "Waiting for more passengers...", 3)
 					WaitingAnnounced = true
 					PhaseEndTime = Now() + RoundConst.INTERMISSION_DURATION
 					BroadcastPhaseChange()
 				end
 			else
 				if not WaitingAnnounced then
-					AnnouncementService.AnnounceAll("Waiting for players", MinPlayers .. " players needed to start", 4)
+					AnnouncementService.AnnounceAll("Awaiting Passengers", MinPlayers .. " passengers required to depart", 4)
 					WaitingAnnounced = true
 				end
 				task.wait(2)
@@ -394,17 +547,109 @@ local function RoundLoop()
 		task.wait(RoundConst.ROLE_REVEAL_DELAY)
 
 		CurrentPhase = "InProgress"
-		RoundEndTime = Now() + RoundConst.ROUND_DURATION
+		RoundStartTime = Now()
+		RoundEndTime = RoundStartTime + RoundConst.ROUND_DURATION
 		PhaseEndTime = RoundEndTime
 		BroadcastPhaseChange()
 
 		CoinService.SpawnCoins()
 
+		ToolService.GiveTools(RoleMap)
+
 		for _, PlayerInstance in Participants do
 			HookParticipantDeath(PlayerInstance)
 		end
 
+		-- Spawn stop sequences concurrently
+		task.spawn(function()
+			local TotalStops = #RoundConst.STOP_TIMES
+			local MaxPenalty = (RoundConst.MAX_ROUND_DURATION - RoundConst.ROUND_DURATION) / TotalStops
+
+			for _, StopTime in RoundConst.STOP_TIMES do
+				local WaitUntil = RoundStartTime + StopTime
+				while Now() < WaitUntil and CurrentPhase == "InProgress" do
+					task.wait(0.5)
+				end
+				if CurrentPhase ~= "InProgress" then
+					break
+				end
+
+				local TotalBrakeTime = WorldScrollService.StopAtNewSceneWithTunnels(
+					{ "LeftStop", "RightMountains", "PowerLines" },
+					"Tunnel",
+					{ "LeftMountains" }
+				)
+				task.wait(TotalBrakeTime + 1)
+				if CurrentPhase ~= "InProgress" then
+					break
+				end
+
+				local SceneCFrame = WorldScrollService.GetSceneCFrame("LeftStop")
+				CoalService.Activate(nil, SceneCFrame)
+				CoinService.SpawnStopCoins(SceneCFrame)
+
+				AnnouncementService.AnnounceAll("Now Stopping", "Load coal and reboard within 1 minute", 4)
+
+				local StopEnd = Now() + RoundConst.STOP_DURATION
+				while Now() < StopEnd and CurrentPhase == "InProgress" do
+					task.wait(0.5)
+				end
+				if CurrentPhase ~= "InProgress" then
+					break
+				end
+
+				-- Tally coal collected this stop
+				local CoalThisStop, RequiredThisStop = CoalService.GetState()
+				TotalCoalCollected += CoalThisStop
+				TotalCoalRequired += RequiredThisStop
+				StopsCompleted += 1
+
+				CoalService.Deactivate()
+				CoinService.DespawnStopCoins()
+
+				-- Teleport anyone not on the train back aboard
+				TeleportStrayPlayersToTrain()
+
+				-- Calculate time penalty based on missing coal
+				local CoalRatio = if RequiredThisStop > 0 then CoalThisStop / RequiredThisStop else 1
+				local PenaltySeconds = math.round(MaxPenalty * (1 - CoalRatio))
+
+				if PenaltySeconds > 0 then
+					RoundEndTime += PenaltySeconds
+					PhaseEndTime = RoundEndTime
+					BroadcastPhaseChange()
+
+					local PenaltyMinutes = math.floor(PenaltySeconds / 60)
+					local PenaltySecs = PenaltySeconds % 60
+					local PenaltyText = if PenaltyMinutes > 0
+						then string.format("+%d:%02d", PenaltyMinutes, PenaltySecs)
+						else string.format("+%ds", PenaltySecs)
+					AnnouncementService.AnnounceAll(
+						"Coal Shortage",
+						"Insufficient coal loaded. " .. PenaltyText .. " added to journey",
+						5,
+						true
+					)
+					task.wait(5)
+				else
+					AnnouncementService.AnnounceAll("All Aboard!", "Full coal loaded — departing at full speed", 3)
+				end
+
+				-- Resume speed scales with coal ratio (full coal = default speed, no coal = 60% speed)
+				local SpeedMultiplier = 0.6 + 0.4 * CoalRatio
+				local ResumeSpeed = math.round(DefaultSpeed * SpeedMultiplier)
+				WorldScrollService.ResumeFromScene(nil, ResumeSpeed, 5)
+				task.wait(6)
+			end
+		end)
+
+		local ApproachingAnnounced = false
 		while CurrentPhase == "InProgress" and Now() < RoundEndTime do
+			local Remaining = RoundEndTime - Now()
+			if not ApproachingAnnounced and Remaining <= 60 and Remaining > 0 then
+				ApproachingAnnounced = true
+				AnnouncementService.AnnounceAll("Approaching Destination", "Less than 1 minute until arrival", 4)
+			end
 			task.wait(0.5)
 		end
 
@@ -418,6 +663,7 @@ local function RoundLoop()
 		end
 
 		CoinService.DespawnAll()
+		CoalService.Deactivate()
 
 		TeleportSurvivorsToLobby()
 
@@ -450,8 +696,8 @@ end)
 Players.PlayerRemoving:Connect(OnPlayerRemoving)
 
 Players.PlayerAdded:Connect(function(PlayerInstance: Player)
-	local _Character = PlayerInstance.Character or PlayerInstance.CharacterAdded:Wait()
-	task.wait()
+	local Character = PlayerInstance.Character or PlayerInstance.CharacterAdded:Wait()
+	Character:WaitForChild("Humanoid")
 	SpawnService.TeleportToLobby(PlayerInstance)
 end)
 

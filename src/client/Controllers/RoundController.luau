@@ -7,6 +7,7 @@ local RoundNetwork = require(ReplicatedStorage.Shared.Network.RoundNetwork)
 local Constants = require(ReplicatedStorage.Shared.Constants)
 local AnnouncementController = require(script.Parent.AnnouncementController)
 local ScrollSpeedState = require(script.Parent.ScrollSpeedState)
+local SpectateController = require(script.Parent.SpectateController)
 local UIState = require(script.Parent.Parent.UI.UIState)
 
 local RoundConst = Constants.Round
@@ -121,6 +122,15 @@ end
 return false
 end
 
+local function _IsLocalEliminated(): boolean
+	for _, Entry in EliminatedPlayers do
+		if Entry.UserId == Player.UserId then
+			return true
+		end
+	end
+	return false
+end
+
 local ACTIVE_PHASES = {
 	RoleReveal = true,
 	InProgress = true,
@@ -128,6 +138,19 @@ local ACTIVE_PHASES = {
 
 local function ShouldBeActive(Phase: string): boolean
 	return ACTIVE_PHASES[Phase] == true and IsLocalParticipant()
+end
+
+local function ShouldEffectsBeActive(Phase: string): boolean
+	if not ACTIVE_PHASES[Phase] then
+		return false
+	end
+	if IsLocalParticipant() and not _IsLocalEliminated() then
+		return true
+	end
+	if SpectateController.IsSpectating() then
+		return true
+	end
+	return false
 end
 
 local function HandlePhaseChange(Phase: string, NewPhaseEndTime: number, NewRoundEndTime: number?)
@@ -138,6 +161,7 @@ RoundEndTime = NewRoundEndTime
 end
 
 ScrollSpeedState.Active = ShouldBeActive(Phase)
+ScrollSpeedState.EffectsActive = ShouldEffectsBeActive(Phase)
 	Atmosphere.Offset = if Phase == "Intermission" or Phase == "PostRound" then 0.04 else 0.4
     print("[RoundController] HandlePhaseChange:", Phase, "| IsParticipant:", IsLocalParticipant(), "| Active:", ScrollSpeedState.Active)
 
@@ -145,6 +169,8 @@ ScrollSpeedState.Active = ShouldBeActive(Phase)
         HideTimer()
         HideRoulette()
         HideScoreboard()
+        table.clear(EliminatedPlayers)
+        MyRole = nil
         if UIState.IsShutterClosed then
             UIState.ShutterOpen(3, TELEPORT_FADE_COLOR)
         end
@@ -190,6 +216,11 @@ Name = Data.Name,
 Role = Data.Role,
 UserId = Data.UserId,
 })
+
+if Data.UserId == Player.UserId then
+HideTimer()
+ScrollSpeedState.EffectsActive = SpectateController.IsSpectating()
+end
 end)
 
 RoundNetwork.packets.RoundResult.listen(function(Data)
@@ -207,8 +238,9 @@ end
 else
 print("[RoundController]   PlayerIds is nil!")
 end
-ScrollSpeedState.Active = ShouldBeActive(CurrentPhase)
-print("[RoundController] ParticipantList result | Phase:", CurrentPhase, "| IsParticipant:", IsLocalParticipant(), "| Active:", ScrollSpeedState.Active)
+	ScrollSpeedState.Active = ShouldBeActive(CurrentPhase)
+	ScrollSpeedState.EffectsActive = ShouldEffectsBeActive(CurrentPhase)
+	print("[RoundController] ParticipantList result | Phase:", CurrentPhase, "| IsParticipant:", IsLocalParticipant(), "| Active:", ScrollSpeedState.Active)
 
 if CurrentPhase == "Teleporting" and IsLocalParticipant() and not UIState.IsShutterClosed then
 task.spawn(UIState.ShutterClose, 1, TELEPORT_FADE_COLOR)
@@ -230,6 +262,7 @@ EliminatedPlayers = State.Eliminated or {}
 LastResultData = State.ResultData
 
 ScrollSpeedState.Active = ShouldBeActive(State.Phase)
+ScrollSpeedState.EffectsActive = ShouldEffectsBeActive(State.Phase)
 	Atmosphere.Offset = if State.Phase == "Intermission" or State.Phase == "PostRound" then 0.04 else 0.4
 print("[RoundController] Initial state sync | Phase:", State.Phase, "| IsParticipant:", IsLocalParticipant(), "| Active:", ScrollSpeedState.Active)
 

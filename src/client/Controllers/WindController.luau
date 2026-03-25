@@ -17,7 +17,7 @@ OnZoneChanged(ZoneCheck.GetState())
 ZoneCheck.OnChanged(OnZoneChanged)
 
 RunService.PreRender:Connect(function()
-	if not ScrollSpeedState.Active then
+	if not ScrollSpeedState.EffectsActive then
 		workspace.GlobalWind = Vector3.zero
 		return
 	end

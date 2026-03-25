@@ -6,12 +6,16 @@ TrainGeneration.ModelPool = ServerStorage.CarModels:GetChildren()
 
 local LocomotiveEnd = workspace.Train.Locomotive.End
 
+local PropModels = ServerStorage:FindFirstChild("PropModels")
+
 local CAR_TYPES = {"Connector", "CabinCar", "FlatCar", "RegularCar"}
 local CONNECTOR_NEIGHBORS = { Connector = true, CabinCar = true }
 local FLATCAR_FOLLOWERS = { CabinCar = true, RegularCar = true }
 local MAX_SUCCESSION = 2
 local FLATCAR_MAX_SUCCESSION = 4
 local ROOMS_PER_CABIN = 5
+local TABLE_SPAWN_CHANCE = 0.9
+local DIVIDER_SPAWN_CHANCE = 0.5
 
 TrainGeneration.Rules = {
 	ConnectorAdjacency = function(Sequence: {string}, Position: number, CarType: string, _Length: number): boolean
@@ -133,6 +137,50 @@ local function AlignCarToEnd(Car: Model, PreviousEnd: BasePart)
 	Car:PivotTo(PreviousEnd.CFrame * Offset:Inverse())
 end
 
+local function GetTableTemplates(): {Instance}
+	local Tables = {}
+	if not PropModels then
+		return Tables
+	end
+	for _, Child in PropModels:GetChildren() do
+		if string.find(Child.Name, "Table") then
+			table.insert(Tables, Child)
+		end
+	end
+	return Tables
+end
+
+local function SpawnProps(Car: Model, Rng: Random)
+	local PropSpawnFolder = Car:FindFirstChild("PropSpawn")
+	if not PropSpawnFolder then
+		return
+	end
+
+	local TableTemplates = GetTableTemplates()
+	local DividerTemplate = PropModels and PropModels:FindFirstChild("Divider")
+
+	for _, SpawnPart in PropSpawnFolder:GetChildren() do
+		if SpawnPart.Name == "TableSpawn" then
+			if #TableTemplates > 0 and Rng:NextNumber() < TABLE_SPAWN_CHANCE then
+				local Template = TableTemplates[Rng:NextInteger(1, #TableTemplates)]
+				local Prop = Template:Clone()
+				local SpawnCF = SpawnPart.CFrame
+				if string.find(string.lower(Template.Name), "small") then
+					SpawnCF = SpawnCF * CFrame.Angles(0, math.rad(90), 0)
+				end
+				Prop:PivotTo(SpawnCF)
+				Prop.Parent = Car
+			end
+		elseif SpawnPart.Name == "DividerSpawn" then
+			if DividerTemplate and Rng:NextNumber() < DIVIDER_SPAWN_CHANCE then
+				local Prop = DividerTemplate:Clone()
+				Prop:PivotTo(SpawnPart.CFrame)
+				Prop.Parent = Car
+			end
+		end
+	end
+end
+
 function TrainGeneration:Generate(Length: number, Seed: number, PlayerCount: number)
 	ClearGeneratedCars()
 
@@ -198,6 +246,10 @@ function TrainGeneration:Generate(Length: number, Seed: number, PlayerCount: num
 
 		Car.Name = CarType .. "_" .. Index
 		Car.Parent = workspace.Train
+
+		if CarType == "RegularCar" then
+			SpawnProps(Car, Rng)
+		end
 
 		local EndPart = Car:FindFirstChild("End")
 		if EndPart then

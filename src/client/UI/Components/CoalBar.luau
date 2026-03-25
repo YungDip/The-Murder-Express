@@ -169,7 +169,7 @@ local function CoalBar()
 			TextColor3 = Colors.GoldDim,
 			TextTransparency = Progress:map(function(A: number) return 1 - A * 0.7 end),
 			TextSize = Stylesheet.TextSize.Small,
-			Text = "Collect coal to fuel the engine",
+			Text = "Click on the coal to drag it back to the train!",
 			TextXAlignment = Enum.TextXAlignment.Center,
 		}, {
 			HintStroke = E("UIStroke", {

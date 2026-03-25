@@ -7,6 +7,7 @@ local UserInputService = game:GetService("UserInputService")
 local Constants = require(ReplicatedStorage.Shared.Constants)
 local CoalNetwork = require(ReplicatedStorage.Shared.Network.CoalNetwork)
 local RoundNetwork = require(ReplicatedStorage.Shared.Network.RoundNetwork)
+local ScrollSpeedState = require(script.Parent.ScrollSpeedState)
 local UIState = require(script.Parent.Parent.UI.UIState)
 
 local CoalConst = Constants.Coal
@@ -18,6 +19,7 @@ local Camera = workspace.CurrentCamera
 local Active = false
 local CurrentCoal = 0
 local RequiredCoal = 0
+local IsEliminated = false
 
 local CarriedCoal: BasePart? = nil
 local CarryAttachment: Attachment? = nil
@@ -34,8 +36,20 @@ local TAP_MAX_DISTANCE = 20
 local RayParams = RaycastParams.new()
 RayParams.FilterType = Enum.RaycastFilterType.Exclude
 
+local Highlights: { [Instance]: Highlight } = {}
+local HighlightConnection: RBXScriptConnection? = nil
+
 local function GetCoalFolder(): Folder?
 	return workspace:FindFirstChild("ServerCoal") :: Folder?
+end
+
+local function GetCoalRootPart(CoalInstance: Instance): BasePart?
+	if CoalInstance:IsA("BasePart") then
+		return CoalInstance
+	elseif CoalInstance:IsA("Model") then
+		return CoalInstance.PrimaryPart or CoalInstance:FindFirstChildWhichIsA("BasePart", true)
+	end
+	return nil
 end
 
 local function StopCarrying()
@@ -164,9 +178,12 @@ CoalNetwork.packets.CoalGrabbed.listen(function(Data)
 	end
 
 	for _, Child in Folder:GetChildren() do
-		if Child:IsA("BasePart") and Child.Name == Data.CoalName then
-			StartCarrying(Child)
-			return
+		if Child.Name == Data.CoalName then
+			local RootPart = GetCoalRootPart(Child)
+			if RootPart then
+				StartCarrying(RootPart)
+				return
+			end
 		end
 	end
 end)
@@ -214,15 +231,79 @@ local function StripClientSceneParts()
 	end
 end
 
+local function CleanupHighlights()
+	if HighlightConnection then
+		HighlightConnection:Disconnect()
+		HighlightConnection = nil
+	end
+	for _, HL in Highlights do
+		HL:Destroy()
+	end
+	table.clear(Highlights)
+end
+
+local function StartHighlightLoop()
+	CleanupHighlights()
+	HighlightConnection = RunService.PreRender:Connect(function()
+		local Character = Player.Character
+		local Root = if Character then Character:FindFirstChild("HumanoidRootPart") else nil
+		if not Root then
+			return
+		end
+
+		local Folder = GetCoalFolder()
+		if not Folder then
+			return
+		end
+
+		local RootPos = Root.Position
+		local Range = CoalConst.HIGHLIGHT_RANGE
+
+		for CoalInst, HL in Highlights do
+			if not CoalInst.Parent then
+				HL:Destroy()
+				Highlights[CoalInst] = nil
+			end
+		end
+
+		for _, Child in Folder:GetChildren() do
+			local CoalRoot = GetCoalRootPart(Child)
+			if not CoalRoot or CoalRoot.Anchored then
+				continue
+			end
+
+			local HL = Highlights[Child]
+			if not HL then
+				HL = Instance.new("Highlight")
+				HL.FillTransparency = 1
+				HL.OutlineColor = Color3.new(1, 1, 1)
+				HL.OutlineTransparency = 1
+				HL.Parent = Child
+				Highlights[Child] = HL
+			end
+
+			local Distance = (RootPos - CoalRoot.Position).Magnitude
+			if Distance >= Range then
+				HL.OutlineTransparency = 1
+			else
+				HL.OutlineTransparency = Distance / Range
+			end
+		end
+	end)
+end
+
 CoalNetwork.packets.CoalActive.listen(function(Data)
 	Active = Data.Active
 	RequiredCoal = Data.Required
-	if Active then
+	if Active and ScrollSpeedState.Active and not IsEliminated then
 		CurrentCoal = 0
 		StripClientSceneParts()
+		StartHighlightLoop()
 		UIState.SetCoalState(true, CurrentCoal, RequiredCoal)
 	else
+		Active = false
 		StopCarrying()
+		CleanupHighlights()
 		UIState.SetCoalState(false, 0, 0)
 	end
 end)
@@ -239,11 +320,27 @@ CoalNetwork.packets.CoalFilled.listen(function()
 	UIState.SetCoalFilled(true)
 end)
 
+RoundNetwork.packets.PlayerEliminated.listen(function(Data)
+	if Data.UserId == Player.UserId then
+		IsEliminated = true
+		if Active then
+			Active = false
+			StopCarrying()
+			CleanupHighlights()
+			UIState.SetCoalState(false, 0, 0)
+		end
+	end
+end)
+
 RoundNetwork.packets.PhaseChange.listen(function(Data)
+	if Data.Phase == "Intermission" or Data.Phase == "Teleporting" then
+		IsEliminated = false
+	end
 	if Data.Phase == "PostRound" or Data.Phase == "Intermission" then
 		if Active then
 			Active = false
 			StopCarrying()
+			CleanupHighlights()
 			UIState.SetCoalState(false, 0, 0)
 		end
 	end
@@ -259,6 +356,9 @@ task.spawn(function()
 	CurrentCoal = State.Current
 	RequiredCoal = State.Required
 	UIState.SetCoalState(Active, CurrentCoal, RequiredCoal)
+	if Active then
+		StartHighlightLoop()
+	end
 end)
 
 function CoalController.IsActive(): boolean

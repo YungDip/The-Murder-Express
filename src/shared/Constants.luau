@@ -66,7 +66,7 @@ Constants.WorldScroll = {
 	SCENE_APPROACH_BUFFER = 800,
 
 	-- How far behind (studs) a one-shot tile can be before cleanup
-	ONESHOT_CLEANUP_BUFFER = 600,
+	ONESHOT_CLEANUP_BUFFER = 1500,
 
 	-- Duration (seconds) of the braking phase when stopping at a scene
 	SCENE_BRAKE_DURATION = 8,
@@ -173,9 +173,13 @@ Constants.Coin = {
 	CLIENT_CHECK_INTERVAL = 0.1,
 	HEIGHT_OFFSET = 1.5,
 	RENDER_DISTANCE = 150,
+	RESPAWN_DELAY = 10,
+	SPAWN_TWEEN_DURATION = 0.5,
+	SPAWN_SPIN_SPEED = 720,
 }
 
 Constants.Coal = {
+	MAX_SPAWNS = 10,
 	REQUIRED_COAL = 5,
 	COLLECTION_TAG = "CoalCollection",
 	COAL_NAME = "MoveableCoal",
@@ -191,6 +195,8 @@ Constants.Coal = {
 	CARRY_HOVER_HEIGHT = 1.5,
 	PICKUP_MAX_DISTANCE = 12,
 
+	HIGHLIGHT_RANGE = 30,
+
 	-- Server-side ground plane (baseplates are client-only)
 	GROUND_SIZE = Vector3.new(120, 2, 80),
 	GROUND_Y_OFFSET = -1,
@@ -198,13 +204,17 @@ Constants.Coal = {
 
 Constants.VERSION = "0.1.0"
 
-Constants.SOLO_TEST_ENABLED = true
+Constants.SOLO_TEST_ENABLED = false
 
 Constants.Round = {
 	MIN_PLAYERS = 3,
 	INTERMISSION_DURATION = 15,
 	ROLE_REVEAL_DELAY = 5,
-	ROUND_DURATION = 180,
+	ROUND_DURATION = 360,
+	MAX_ROUND_DURATION = 510,
+	STOP_DURATION = 60,
+	STOP_TIMES = { 60, 280 },
+	KILL_TIME_BONUS = 10,
 	POST_ROUND_DURATION = 8,
 	TELEPORT_FADE_DURATION = 1.5,
 	DEATH_RAGDOLL_WAIT = 3,

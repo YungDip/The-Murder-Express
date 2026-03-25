@@ -84,11 +84,11 @@ end
 end
 
 AnnouncementNetwork.packets.Show.listen(function(Data: { Title: string, Subtitle: string?, Duration: number?, IsWarning: boolean? })
-if Data.IsWarning then
-AnnouncementController.Warn(Data.Title, Data.Subtitle, Data.Duration)
-else
-AnnouncementController.Announce(Data.Title, Data.Subtitle, Data.Duration)
-end
+    if Data.IsWarning then
+        AnnouncementController.Warn(Data.Title, Data.Subtitle, Data.Duration)
+    else
+        AnnouncementController.Announce(Data.Title, Data.Subtitle, Data.Duration)
+    end
 end)
 
 --[[

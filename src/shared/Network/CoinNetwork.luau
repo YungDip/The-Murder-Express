@@ -27,6 +27,16 @@ local CoinNetwork = ByteNet.defineNamespace("Coins", function()
 				reliabilityType = "reliable",
 			}),
 
+			SpawnCoin = ByteNet.definePacket({
+				value = ByteNet.struct({
+					Id = ByteNet.uint16,
+					X = ByteNet.float32,
+					Y = ByteNet.float32,
+					Z = ByteNet.float32,
+				}),
+				reliabilityType = "reliable",
+			}),
+
 			RequestCollect = ByteNet.definePacket({
 				value = ByteNet.struct({
 					Id = ByteNet.uint16,

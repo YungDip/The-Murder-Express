@@ -27,6 +27,14 @@
       "CarModels" : {
         "$className": "Folder",
         "$ignoreUnknownInstances": true
+      },
+      "PropModels": {
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true
+      },
+      "Tools": {
+        "$className": "Folder",
+        "$ignoreUnknownInstances": true
       }
     },
 

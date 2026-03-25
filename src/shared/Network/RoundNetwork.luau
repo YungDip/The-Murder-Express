@@ -47,6 +47,16 @@ local RoundNetwork = ByteNet.defineNamespace("Round", function()
 				}),
 				reliabilityType = "reliable",
 			}),
+
+			RequestGunPickup = ByteNet.definePacket({
+				value = ByteNet.nothing,
+				reliabilityType = "reliable",
+			}),
+
+			GunPickupCollected = ByteNet.definePacket({
+				value = ByteNet.nothing,
+				reliabilityType = "reliable",
+			}),
 		},
 		queries = {
 			RequestRoundState = ByteNet.defineQuery({

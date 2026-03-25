@@ -21,6 +21,15 @@ local ClickConnections: { RBXScriptConnection } = {}
 local SpawnedParts: { Instance } = {}
 local FilledCallback: (() -> ())? = nil
 
+local function GetCoalRootPart(CoalInstance: Instance): BasePart?
+	if CoalInstance:IsA("BasePart") then
+		return CoalInstance
+	elseif CoalInstance:IsA("Model") then
+		return CoalInstance.PrimaryPart or CoalInstance:FindFirstChildWhichIsA("BasePart", true)
+	end
+	return nil
+end
+
 local function BroadcastCoalState()
 	CoalNetwork.packets.CoalState.sendToAll({
 		Current = CurrentCoal,
@@ -58,7 +67,11 @@ local function CollectAnimation(Coal: BasePart, CollectionPart: BasePart)
 	})
 	ShrinkTween:Play()
 	ShrinkTween.Completed:Wait()
-	Coal:Destroy()
+	if Coal.Parent and Coal.Parent:IsA("Model") then
+		Coal.Parent:Destroy()
+	else
+		Coal:Destroy()
+	end
 end
 
 local function ReleaseCoal(PlayerRef: Player)
@@ -131,7 +144,7 @@ local function OnCoalTouchCollection(Coal: BasePart, OtherPart: BasePart)
 		})
 		AnnouncementService.AnnounceAll(
 			"Coal Loaded!",
-			"Board the train! Departing in " .. CoalConst.BOARDING_WARNING_DURATION .. " seconds!",
+			"All passengers reboard — departing in " .. CoalConst.BOARDING_WARNING_DURATION .. " seconds",
 			CoalConst.BOARDING_WARNING_DURATION - 2,
 			true
 		)
@@ -141,47 +154,60 @@ local function OnCoalTouchCollection(Coal: BasePart, OtherPart: BasePart)
 	end
 end
 
-local function SetupCoalPart(Coal: BasePart)
-	local ClickDetector = Instance.new("ClickDetector")
-	ClickDetector.MaxActivationDistance = CoalConst.PICKUP_MAX_DISTANCE
-	ClickDetector.Parent = Coal
-
-	local ClickConn = ClickDetector.MouseClick:Connect(function(PlayerWhoClicked: Player)
-		if not Active then
-			return
+local function SetupCoalPart(CoalInstance: Instance, RootPart: BasePart)
+	local ClickableParts = {}
+	if CoalInstance:IsA("BasePart") then
+		table.insert(ClickableParts, CoalInstance)
+	elseif CoalInstance:IsA("Model") then
+		for _, Desc in CoalInstance:GetDescendants() do
+			if Desc:IsA("BasePart") then
+				table.insert(ClickableParts, Desc)
+			end
 		end
-		if CollectedCoals[Coal] then
-			return
-		end
+	end
 
-		if GrabbedCoals[Coal] then
-			return
-		end
-		if PlayerGrabbedCoal[PlayerWhoClicked] then
-			return
-		end
+	for _, Part in ClickableParts do
+		local ClickDetector = Instance.new("ClickDetector")
+		ClickDetector.MaxActivationDistance = CoalConst.PICKUP_MAX_DISTANCE
+		ClickDetector.Parent = Part
 
-		GrabbedCoals[Coal] = PlayerWhoClicked
-		PlayerGrabbedCoal[PlayerWhoClicked] = Coal
+		local ClickConn = ClickDetector.MouseClick:Connect(function(PlayerWhoClicked: Player)
+			if not Active then
+				return
+			end
+			if CollectedCoals[RootPart] then
+				return
+			end
 
-		pcall(function()
-			Coal:SetNetworkOwner(PlayerWhoClicked)
+			if GrabbedCoals[RootPart] then
+				return
+			end
+			if PlayerGrabbedCoal[PlayerWhoClicked] then
+				return
+			end
+
+			GrabbedCoals[RootPart] = PlayerWhoClicked
+			PlayerGrabbedCoal[PlayerWhoClicked] = RootPart
+
+			pcall(function()
+				RootPart:SetNetworkOwner(PlayerWhoClicked)
+			end)
+
+			CoalNetwork.packets.CoalGrabbed.sendTo({
+				CoalName = RootPart.Name,
+			}, PlayerWhoClicked)
 		end)
 
-		CoalNetwork.packets.CoalGrabbed.sendTo({
-			CoalName = Coal.Name,
-		}, PlayerWhoClicked)
-	end)
+		table.insert(ClickConnections, ClickConn)
+	end
 
-	table.insert(ClickConnections, ClickConn)
-
-	TouchConnections[Coal] = Coal.Touched:Connect(function(OtherPart: BasePart)
-		OnCoalTouchCollection(Coal, OtherPart)
+	TouchConnections[RootPart] = RootPart.Touched:Connect(function(OtherPart: BasePart)
+		OnCoalTouchCollection(RootPart, OtherPart)
 	end)
 end
 
 --[[
-	Clones tagged coal + collection parts from the LeftStop template to the server
+	Spawns coal at random CoalSpawns positions from the LeftStop template
 ]]
 local function SpawnCoalPartsAtScene(SceneCFrame: CFrame)
 	local ZoneModels = ReplicatedStorage:WaitForChild("ZoneModels") :: Folder
@@ -191,6 +217,7 @@ local function SpawnCoalPartsAtScene(SceneCFrame: CFrame)
 		return
 	end
 
+	local CoalModel = ReplicatedStorage:WaitForChild("DebrisModels"):WaitForChild("Coal")
 	local TemplatePivot = Template:GetPivot()
 
 	local CoalFolder = Instance.new("Folder")
@@ -220,18 +247,60 @@ local function SpawnCoalPartsAtScene(SceneCFrame: CFrame)
 		end
 	end
 
-	-- Clone MoveableCoal tagged parts
-	for _, Descendant in Template:GetDescendants() do
-		if Descendant:IsA("BasePart") and CollectionService:HasTag(Descendant, CoalConst.COAL_NAME) then
-			local RelativeCF = TemplatePivot:Inverse() * Descendant.CFrame
-			local Coal = Descendant:Clone()
-			Coal.Name = HttpService:GenerateGUID(false)
+	-- Gather spawn points from CoalSpawns folder
+	local CoalSpawnsFolder = Template:FindFirstChild("CoalSpawns")
+	if not CoalSpawnsFolder then
+		warn("[CoalService] CoalSpawns folder not found in LeftStop")
+		return
+	end
+
+	local SpawnPoints = {}
+	for _, Child in CoalSpawnsFolder:GetChildren() do
+		if Child:IsA("BasePart") then
+			table.insert(SpawnPoints, Child)
+		end
+	end
+
+	-- Shuffle and pick up to MAX_SPAWNS random positions
+	for I = #SpawnPoints, 2, -1 do
+		local J = math.random(1, I)
+		SpawnPoints[I], SpawnPoints[J] = SpawnPoints[J], SpawnPoints[I]
+	end
+
+	local Count = math.min(#SpawnPoints, CoalConst.MAX_SPAWNS)
+	for I = 1, Count do
+		local SpawnPart = SpawnPoints[I]
+		local RelativeCF = TemplatePivot:Inverse() * SpawnPart.CFrame
+		local Coal = CoalModel:Clone()
+		local CoalGUID = HttpService:GenerateGUID(false)
+		Coal.Name = CoalGUID
+
+		if Coal:IsA("Model") then
+			Coal:PivotTo(SceneCFrame * RelativeCF)
+			local RootPart = GetCoalRootPart(Coal)
+			if RootPart then
+				RootPart.Name = CoalGUID
+				RootPart.Anchored = false
+				RootPart.CanCollide = true
+			end
+			for _, Desc in Coal:GetDescendants() do
+				if Desc:IsA("BasePart") and Desc ~= RootPart then
+					Desc.Anchored = false
+					Desc.CanCollide = false
+					local Weld = Instance.new("WeldConstraint")
+					Weld.Part0 = RootPart
+					Weld.Part1 = Desc
+					Weld.Parent = Desc
+				end
+			end
+		else
 			Coal.CFrame = SceneCFrame * RelativeCF
 			Coal.Anchored = false
 			Coal.CanCollide = true
-			Coal.Parent = CoalFolder
-			table.insert(SpawnedParts, Coal)
 		end
+
+		Coal.Parent = CoalFolder
+		table.insert(SpawnedParts, Coal)
 	end
 end
 
@@ -280,12 +349,13 @@ function CoalService.Activate(Required: number?, SceneCFrame: CFrame?)
 		SpawnCoalPartsAtScene(SceneCFrame)
 	end
 
-	-- Set up click + touch on coal parts (those not anchored = actual coal pieces)
+	-- Set up click + touch on coal parts
 	local CoalFolder = workspace:FindFirstChild("ServerCoal")
 	if CoalFolder then
 		for _, Child in CoalFolder:GetChildren() do
-			if Child:IsA("BasePart") and not Child.Anchored then
-				SetupCoalPart(Child)
+			local RootPart = GetCoalRootPart(Child)
+			if RootPart and not RootPart.Anchored then
+				SetupCoalPart(Child, RootPart)
 			end
 		end
 	end

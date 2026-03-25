@@ -447,6 +447,40 @@ function WorldScrollService.GetStopDistance(): number
 	return CurrentStopDistance
 end
 
+--[[
+	Resets the scroll state to default moving, clearing any scene/stop state.
+	Used between rounds to ensure a clean slate.
+]]
+function WorldScrollService.Reset()
+	local CurrentTime = Now()
+	ScrollState = {
+		BaseDistance = 0,
+		BaseTime = CurrentTime,
+		Speed = Constants.WorldScroll.DEFAULT_SPEED,
+		Transition = nil,
+	}
+
+	ActiveScenery = { "LeftMountains", "RightMountains" }
+	CurrentPhase = "Looping"
+	CurrentSceneModels = {}
+	CurrentStopDistance = 0
+
+	local Flat = EncodeFlatScrollState(ScrollState)
+	WorldScrollNetwork.packets.SyncState.sendToAll({
+		ScrollBaseDistance = Flat.ScrollBaseDistance,
+		ScrollBaseTime = Flat.ScrollBaseTime,
+		ScrollSpeed = Flat.ScrollSpeed,
+		ScrollHasTransition = Flat.ScrollHasTransition,
+		ScrollTransitionStartSpeed = Flat.ScrollTransitionStartSpeed,
+		ScrollTransitionEndSpeed = Flat.ScrollTransitionEndSpeed,
+		ScrollTransitionStartTime = Flat.ScrollTransitionStartTime,
+		ScrollTransitionDuration = Flat.ScrollTransitionDuration,
+		ActiveScenery = ActiveScenery,
+		Phase = CurrentPhase,
+		SceneModels = CurrentSceneModels,
+	})
+end
+
 do
 	local CurrentTime = Now()
 	ScrollState = {

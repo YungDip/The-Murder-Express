@@ -210,4 +210,48 @@ function UIState.ShutterReset()
 	UIState.ShutterChanged:Fire(UIState.ShutterState)
 end
 
+-- Spectate
+UIState.SpectateChanged = CreateSignal()
+UIState.SpectateState = {
+	Visible = false,
+	CanSpectate = false,
+	TargetName = "",
+	TargetRole = "",
+	TargetUserId = 0,
+	AliveCount = 0,
+}
+
+function UIState.SetSpectateCanSpectate(CanSpectate: boolean)
+	UIState.SpectateState.CanSpectate = CanSpectate
+	UIState.SpectateChanged:Fire(UIState.SpectateState)
+end
+
+function UIState.ShowSpectate(TargetName: string, TargetRole: string, TargetUserId: number, AliveCount: number)
+	UIState.SpectateState.Visible = true
+	UIState.SpectateState.CanSpectate = false
+	UIState.SpectateState.TargetName = TargetName
+	UIState.SpectateState.TargetRole = TargetRole
+	UIState.SpectateState.TargetUserId = TargetUserId
+	UIState.SpectateState.AliveCount = AliveCount
+	UIState.SpectateChanged:Fire(UIState.SpectateState)
+end
+
+function UIState.UpdateSpectateTarget(TargetName: string, TargetRole: string, TargetUserId: number, AliveCount: number)
+	UIState.SpectateState.TargetName = TargetName
+	UIState.SpectateState.TargetRole = TargetRole
+	UIState.SpectateState.TargetUserId = TargetUserId
+	UIState.SpectateState.AliveCount = AliveCount
+	UIState.SpectateChanged:Fire(UIState.SpectateState)
+end
+
+function UIState.HideSpectate(ShowButton: boolean?)
+	UIState.SpectateState.Visible = false
+	UIState.SpectateState.CanSpectate = ShowButton == true
+	UIState.SpectateChanged:Fire(UIState.SpectateState)
+end
+
+UIState.OnSpectateStart = nil :: (() -> ())?
+UIState.OnSpectateStop = nil :: (() -> ())?
+UIState.OnSpectateCycle = nil :: ((Direction: number) -> ())?
+
 return UIState

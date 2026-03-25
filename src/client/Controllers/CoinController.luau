@@ -27,7 +27,7 @@ local LastCheckTime: number = 0
 --[[
 	clones a coin meshpart at the given position
 ]]
-local function CreateCoin(Id: number, Position: Vector3)
+local function CreateCoin(Id: number, Position: Vector3, Animate: boolean?)
 	local Coin = CoinTemplate:Clone()
 	Coin.Name = "Coin_" .. Id
 	Coin.CFrame = CFrame.new(Position)
@@ -40,6 +40,26 @@ local function CreateCoin(Id: number, Position: Vector3)
 
 	CoinParts[Id] = Coin
 	CoinPositions[Id] = Position
+
+	if Animate then
+		local FullSize = Coin.Size
+		Coin.Size = Vector3.zero
+
+		local Duration = CoinConst.SPAWN_TWEEN_DURATION
+		local SpinConnection: RBXScriptConnection
+		SpinConnection = RunService.PreRender:Connect(function()
+			local SpinAngle = (os.clock() * CoinConst.SPAWN_SPIN_SPEED) % 360
+			Coin.CFrame = CFrame.new(Position) * CFrame.Angles(0, math.rad(SpinAngle), 0)
+		end)
+
+		local Tween = TweenService:Create(Coin, TweenInfo.new(Duration, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+			Size = FullSize,
+		})
+		Tween:Play()
+		Tween.Completed:Once(function()
+			SpinConnection:Disconnect()
+		end)
+	end
 end
 
 --[[
@@ -133,6 +153,10 @@ end)
 
 CoinNetwork.packets.CollectCoin.listen(function(Data)
 	CollectCoin(Data.Id)
+end)
+
+CoinNetwork.packets.SpawnCoin.listen(function(Data)
+	CreateCoin(Data.Id, Vector3.new(Data.X, Data.Y, Data.Z), true)
 end)
 
 CoinNetwork.packets.DespawnAll.listen(function()

@@ -98,7 +98,7 @@ function SoundController.InitThunder()
 		local Interval = math.random(SoundConst.THUNDER_MIN_INTERVAL, SoundConst.THUNDER_MAX_INTERVAL)
 		task.wait(Interval)
 
-		if not ScrollSpeedState.Active then
+		if not ScrollSpeedState.EffectsActive then
 			continue
 		end
 
@@ -180,7 +180,7 @@ function SoundController.InitWhistle()
 	Whistle.Parent = Horn
 
 	while true do
-		if ScrollSpeedState.Active then
+		if ScrollSpeedState.EffectsActive then
 			Whistle:Play()
 		end
 		task.wait(Constants.Sound.WHISTLE_INTERVAL)
@@ -197,7 +197,7 @@ do
 	local WasActive = false
 
 	RunService.PreRender:Connect(function(DeltaTime: number)
-		local IsActive = ScrollSpeedState.Active
+		local IsActive = ScrollSpeedState.EffectsActive
 
 		if IsActive and not WasActive then
 			print("[SoundController] Active transition: OFF -> ON")

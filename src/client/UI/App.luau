@@ -7,6 +7,7 @@ local Roulette = require(script.Parent.Components.Roulette)
 local Scoreboard = require(script.Parent.Components.Scoreboard)
 local PlayerList = require(script.Parent.Components.PlayerList)
 local CoalBar = require(script.Parent.Components.CoalBar)
+local SpectateHUD = require(script.Parent.Components.SpectateHUD)
 
 local E = React.createElement
 
@@ -18,6 +19,7 @@ local function App()
 		Scoreboard = E(Scoreboard),
 		PlayerList = E(PlayerList),
 		CoalBar = E(CoalBar),
+		SpectateHUD = E(SpectateHUD),
 	})
 end
 

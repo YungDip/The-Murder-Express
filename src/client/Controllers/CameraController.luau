@@ -107,7 +107,7 @@ RunService.PreRender:Connect(function(DeltaTime: number)
 		GustTarget = 1
 	end
 
-	local SpeedRatio = ScrollSpeedState.SpeedRatio
+	local SpeedRatio = if ScrollSpeedState.EffectsActive then ScrollSpeedState.SpeedRatio else 0
 
 	local PosNoise = SampleNoise(Elapsed, CurrentFrequency, PhaseOffset)
 	local RotNoise = SampleNoise(Elapsed, CurrentRotFrequency, RotPhaseOffset)
